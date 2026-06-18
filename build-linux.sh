@@ -13,17 +13,17 @@ if ! command -v cmake >/dev/null; then
   exit 1
 fi
 
+if [[ ! -f "$CORE_DIR/sing-box" ]]; then
+  echo "==> Fetching cores..."
+  bash "$ROOT/tools/fetch-core-linux.sh" "$CORE_DIR"
+fi
+
 cmake -DCMAKE_BUILD_TYPE=Release -B "$BUILD_DIR"
 cmake --build "$BUILD_DIR" -j"$(nproc)"
 
 if [[ ! -f "$BUILD_DIR/VicVPN" ]]; then
   echo "Build failed: VicVPN binary not found"
   exit 1
-fi
-
-if [[ ! -f "$CORE_DIR/sing-box" ]]; then
-  echo "==> Fetching cores..."
-  bash "$ROOT/tools/fetch-core-linux.sh" "$CORE_DIR"
 fi
 
 echo "[OK] $BUILD_DIR/VicVPN"

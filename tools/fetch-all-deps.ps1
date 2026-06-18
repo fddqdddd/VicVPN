@@ -7,8 +7,12 @@ $ErrorActionPreference = "Stop"
 if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
 
 function Get-LatestReleaseAsset($repo, $pattern) {
+    $headers = @{ "User-Agent" = "VicVPN" }
+    if ($env:GITHUB_TOKEN) {
+        $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)"
+    }
     $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" `
-        -Headers @{ "User-Agent" = "VicVPN" }
+        -Headers $headers
     $asset = $rel.assets | Where-Object { $_.name -match $pattern } | Select-Object -First 1
     if (-not $asset) { throw "Asset not found: $repo / $pattern" }
     return $asset

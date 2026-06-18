@@ -64,16 +64,22 @@ bool SingboxCoreManager::start(const QString& configPath) {
 
     const QString exe = AppPaths::singboxExe();
     if (!QFileInfo::exists(exe)) {
+#if defined(Q_OS_WIN)
         lastError_ = "sing-box.exe not found";
+#else
+        lastError_ = "sing-box not found";
+#endif
         return false;
     }
     const QString coreDir = QFileInfo(exe).absolutePath();
+#if defined(Q_OS_WIN)
     AppPaths::ensureWintunDll();
     copyWintun(coreDir);
     if (!QFileInfo::exists(coreDir + "/wintun.dll")) {
         lastError_ = "wintun.dll not found in core/";
         return false;
     }
+#endif
 
     proc_->setProgram(exe);
     proc_->setArguments({"run", "-c", QDir::toNativeSeparators(configPath),

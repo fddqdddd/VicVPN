@@ -9,6 +9,8 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup MSYS2
@@ -43,6 +45,8 @@ jobs:
 
   linux:
     runs-on: ubuntu-24.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Install deps

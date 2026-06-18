@@ -14,8 +14,31 @@ if [[ -d "$BUNDLED" && -f "$BUNDLED/sing-box" ]]; then
   exit 0
 fi
 
-OUT_DIR="${1:-build-linux/core}"
 mkdir -p "$OUT_DIR"
+
+curl_api() {
+  local url="$1"
+  local args=(-fsSL -H "User-Agent: VicVPN-CI")
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  fi
+  curl "${args[@]}" "$url"
+}
+
+pick_asset_url() {
+  local json="$1"
+  local pattern="$2"
+  PATTERN="$pattern" python3 -c '
+import json, os, re, sys
+pat = re.compile(os.environ["PATTERN"])
+data = json.load(sys.stdin)
+for asset in data.get("assets", []):
+    url = asset.get("browser_download_url", "")
+    if pat.search(url):
+        print(url)
+        break
+' <<<"$json"
+}
 
 fetch_github() {
   local repo="$1"
@@ -27,12 +50,12 @@ fetch_github() {
     return
   fi
   echo "[fetch] $repo -> $dest_name"
-  local url
-  url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" \
-    | grep -o "https://[^\"]*$pattern" | head -1)
+  local json url tmp
+  json=$(curl_api "https://api.github.com/repos/$repo/releases/latest")
+  url=$(pick_asset_url "$json" "$pattern")
   if [[ -z "$url" ]]; then
-    echo "Asset not found: $repo $pattern" >&2
-    exit 1
+    echo "Asset not found: $repo / $pattern" >&2
+    return 1
   fi
   tmp=$(mktemp)
   curl -fsSL "$url" -o "$tmp"
@@ -40,15 +63,14 @@ fetch_github() {
     unzip -q -j "$tmp" -d "$OUT_DIR"
     rm -f "$tmp"
   elif [[ "$url" == *.tar.gz ]] || [[ "$url" == *.tgz ]]; then
-    local extract
+    local extract bin
     extract=$(mktemp -d)
     tar -xzf "$tmp" -C "$extract"
     rm -f "$tmp"
-    local bin
-    bin=$(find "$extract" -type f -name "$dest_name*" | head -1)
+    bin=$(find "$extract" -type f -name "${dest_name}*" | head -1)
     if [[ -z "$bin" ]]; then
       echo "Binary not found in archive: $repo $pattern" >&2
-      exit 1
+      return 1
     fi
     cp "$bin" "$dest"
     chmod +x "$dest"
@@ -59,12 +81,13 @@ fetch_github() {
   fi
 }
 
-fetch_github "SagerNet/sing-box" "linux-amd64" "sing-box"
-fetch_github "XTLS/Xray-core" "linux-64.zip" "xray"
-fetch_github "apernet/hysteria" "hysteria-linux-amd64" "hysteria"
-fetch_github "xjasonlyu/tun2socks" "tun2socks-linux-amd64" "tun2socks"
+if ! fetch_github "SagerNet/sing-box" 'linux-amd64-glibc\.tar\.gz$' "sing-box"; then
+  fetch_github "SagerNet/sing-box" 'linux-amd64\.tar\.gz$' "sing-box"
+fi
+fetch_github "XTLS/Xray-core" 'linux-64\.zip$' "xray"
+fetch_github "apernet/hysteria" 'hysteria-linux-amd64$' "hysteria"
+fetch_github "xjasonlyu/tun2socks" 'tun2socks-linux-amd64-v3\.zip$' "tun2socks"
 
-# Normalize names after zip extract
 for f in "$OUT_DIR"/sing-box*; do
   [[ -f "$f" ]] && [[ "$f" != *sing-box ]] && mv "$f" "$OUT_DIR/sing-box" && chmod +x "$OUT_DIR/sing-box"
 done
