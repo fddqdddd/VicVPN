@@ -25,15 +25,20 @@ if not exist "resources\icons\vicvpn.ico" (
     powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-icon.ps1
 )
 
+if not exist "build-mingw\core\sing-box.exe" (
+    echo Скачивание ядер и библиотек...
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-all-deps.ps1
+    if errorlevel 1 goto :fail
+)
+
 cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/ucrt64 -B build-mingw
 if errorlevel 1 goto :fail
 
 cmake --build build-mingw -j
 if errorlevel 1 goto :fail
 
-if not exist "build-mingw\core\sing-box.exe" (
-    echo Скачивание ядер и библиотек...
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-all-deps.ps1
+if not exist "build-mingw\core\wintun.dll" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools\ensure-wintun.ps1
     if errorlevel 1 goto :fail
 )
 

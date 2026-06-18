@@ -117,9 +117,6 @@ if(WIN32)
     add_custom_command(TARGET VicVPN POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:VicVPN>/core
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_SOURCE_DIR}/third_party/wintun/wintun.dll
-            $<TARGET_FILE_DIR:VicVPN>/core/wintun.dll
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_SOURCE_DIR}/third_party/wintun/LICENSE-wintun.txt
             $<TARGET_FILE_DIR:VicVPN>/core/LICENSE-wintun.txt
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -130,6 +127,14 @@ if(WIN32)
             $<TARGET_FILE_DIR:VicVPN>/styles/dark.qss
         COMMENT "Copy runtime assets"
     )
+    if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/wintun/wintun.dll")
+        add_custom_command(TARGET VicVPN POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_SOURCE_DIR}/third_party/wintun/wintun.dll
+                $<TARGET_FILE_DIR:VicVPN>/core/wintun.dll
+            COMMENT "Copy wintun.dll"
+        )
+    endif()
 else()
     add_custom_command(TARGET VicVPN POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory

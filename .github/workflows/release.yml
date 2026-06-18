@@ -19,6 +19,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-qt6-base
             mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qt6-tools
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-nlohmann-json
             mingw-w64-ucrt-x86_64-sqlite3
@@ -26,8 +27,8 @@ jobs:
         shell: msys2 {0}
         run: |
           ./build-mingw.bat
-          powershell -File tools/package-portable.ps1
-          powershell -File tools/build-setup-exe.ps1
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/package-portable.ps1
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-setup-exe.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: VicVPN-windows-beta
