@@ -30,4 +30,24 @@ QString NetworkRoute::interfaceNameForLocalIpv4(const QString&) {
     return {};
 }
 
+bool NetworkRoute::isTunAdapterPresent(const QString& name) {
+    if (name.isEmpty())
+        return false;
+    QProcess proc;
+    proc.setProgram("ip");
+    proc.setArguments({"link", "show", name});
+    proc.start();
+    return proc.waitForFinished(3000) && proc.exitCode() == 0;
+}
+
+bool NetworkRoute::isTunAdapterPresent() {
+    QProcess proc;
+    proc.setProgram("ip");
+    proc.setArguments({"link", "show", "type", "tun"});
+    proc.start();
+    if (!proc.waitForFinished(3000) || proc.exitCode() != 0)
+        return false;
+    return !QString::fromUtf8(proc.readAllStandardOutput()).trimmed().isEmpty();
+}
+
 } // namespace vicvpn

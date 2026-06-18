@@ -12,9 +12,12 @@ if (-not (Test-Path $exe)) {
     throw "VicVPN.exe not found. Run build-mingw.bat first."
 }
 
-$windeployqt = "C:\msys64\ucrt64\bin\windeployqt.exe"
+$windeployqt = Join-Path $env:MSYSTEM_PREFIX "bin\windeployqt.exe"
 if (-not (Test-Path $windeployqt)) {
-    throw "windeployqt not found at $windeployqt"
+    $windeployqt = "C:\msys64\ucrt64\bin\windeployqt.exe"
+}
+if (-not (Test-Path $windeployqt)) {
+    throw "windeployqt not found (set MSYSTEM_PREFIX or install Qt6 tools)"
 }
 
 $out = Join-Path $root $OutDir
