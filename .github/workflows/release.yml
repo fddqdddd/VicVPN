@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/ucrt64 -B build-mingw
-          cmake --build build-mingw -j"$(nproc)"
+          cmake --build build-mingw -j8
           test -f build-mingw/VicVPN.exe
       - name: Ensure wintun
         shell: msys2 {0}
