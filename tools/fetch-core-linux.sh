@@ -39,6 +39,20 @@ fetch_github() {
   if [[ "$url" == *.zip ]]; then
     unzip -q -j "$tmp" -d "$OUT_DIR"
     rm -f "$tmp"
+  elif [[ "$url" == *.tar.gz ]] || [[ "$url" == *.tgz ]]; then
+    local extract
+    extract=$(mktemp -d)
+    tar -xzf "$tmp" -C "$extract"
+    rm -f "$tmp"
+    local bin
+    bin=$(find "$extract" -type f -name "$dest_name*" | head -1)
+    if [[ -z "$bin" ]]; then
+      echo "Binary not found in archive: $repo $pattern" >&2
+      exit 1
+    fi
+    cp "$bin" "$dest"
+    chmod +x "$dest"
+    rm -rf "$extract"
   else
     mv "$tmp" "$dest"
     chmod +x "$dest"

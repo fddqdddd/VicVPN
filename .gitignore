@@ -24,5 +24,7 @@ moc_*.cpp
 ui_*.h
 qrc_*.cpp
 tools/innosetup*.exe
+tools/MinGit/
+tools/gh/
 third_party/wintun/*.dll
 third_party/cores/
