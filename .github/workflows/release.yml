@@ -34,8 +34,11 @@ jobs:
           cmake --build build-mingw -j"$(nproc)"
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/ensure-wintun.ps1 -OutDir build-mingw/core
           test -f build-mingw/core/wintun.dll
+          test -f build-mingw/VicVPN.exe
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/package-portable.ps1
+          ls dist/VicVPN-windows-*-portable.zip >/dev/null
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-setup-exe.ps1
+          ls dist/VicVPN-windows-*-setup.exe >/dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: VicVPN-windows-beta
