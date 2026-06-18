@@ -1,0 +1,35 @@
+name: Linux
+
+on:
+  push:
+    branches: [main, master, beta]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake g++ \
+            qt6-base-dev qt6-svg-dev \
+            libsqlite3-dev nlohmann-json3-dev \
+            unzip curl
+
+      - name: Build VicVPN
+        run: bash build-linux.sh
+
+      - name: Package
+        run: bash tools/package-linux.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VicVPN-linux-x64-beta
+          path: dist/VicVPN-linux-x64-*.tar.gz

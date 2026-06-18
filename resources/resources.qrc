@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>styles/dark.qss</file>
+        <file>icons/vicvpn.png</file>
+        <file>icons/vicvpn.svg</file>
+        <file alias="cores/wintun.dll">../third_party/wintun/wintun.dll</file>
+        <file alias="cores/LICENSE-wintun.txt">../third_party/wintun/LICENSE-wintun.txt</file>
+    </qresource>
+</RCC>

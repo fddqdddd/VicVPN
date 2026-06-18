@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-nlohmann-json
+            mingw-w64-ucrt-x86_64-sqlite3
+      - name: Build Windows
+        shell: msys2 {0}
+        run: |
+          ./build-mingw.bat
+          powershell -File tools/package-portable.ps1
+          powershell -File tools/build-setup-exe.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VicVPN-windows-beta
+          path: |
+            dist/VicVPN-windows-*-setup.exe
+            dist/VicVPN-windows-*-portable.zip
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ qt6-base-dev qt6-svg-dev \
+            libsqlite3-dev nlohmann-json3-dev unzip curl
+      - run: bash tools/package-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VicVPN-linux-beta
+          path: dist/VicVPN-linux-x64-*.tar.gz
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
