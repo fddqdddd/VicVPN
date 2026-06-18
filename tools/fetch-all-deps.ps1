@@ -25,7 +25,7 @@ function Download-File($url, $dest) {
 
     $headers = @{ "User-Agent" = "VicVPN/0.1.0-beta" }
     $urls = @($url)
-    if ($url -match '^https://github\.com/') {
+    if ($url -match '^https://github\.com/' -and $env:GITHUB_ACTIONS -ne 'true') {
         $urls += "https://ghfast.top/$url"
         $urls += "https://mirror.ghproxy.com/$url"
     }
@@ -75,7 +75,7 @@ function Fetch-WindowsCores($outDir) {
         @{ Name = "sing-box.exe"; Repo = "SagerNet/sing-box"; Pattern = "windows-amd64\.zip$"; Zip = $true; Bin = "sing-box*.exe" },
         @{ Name = "xray.exe"; Repo = "XTLS/Xray-core"; Pattern = "windows-64\.zip$"; Zip = $true; Bin = "xray.exe" },
         @{ Name = "hysteria.exe"; Repo = "apernet/hysteria"; Pattern = "hysteria-windows-amd64\.exe$"; Zip = $false },
-        @{ Name = "tun2socks.exe"; Repo = "xjasonlyu/tun2socks"; Pattern = "tun2socks-windows-amd64"; Zip = $true; Bin = "tun2socks*.exe" }
+        @{ Name = "tun2socks.exe"; Repo = "xjasonlyu/tun2socks"; Pattern = "tun2socks-windows-amd64-v3\.zip$"; Zip = $true; Bin = "tun2socks*.exe" }
     )
 
     foreach ($j in $jobs) {

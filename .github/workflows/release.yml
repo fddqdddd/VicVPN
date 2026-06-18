@@ -25,20 +25,34 @@ jobs:
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-nlohmann-json
             mingw-w64-ucrt-x86_64-sqlite3
-      - name: Build Windows
+      - name: Fetch cores
+        shell: msys2 {0}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/fetch-all-deps.ps1
+      - name: CMake build
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/fetch-all-deps.ps1
           cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/ucrt64 -B build-mingw
           cmake --build build-mingw -j"$(nproc)"
+          test -f build-mingw/VicVPN.exe
+      - name: Ensure wintun
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/ensure-wintun.ps1 -OutDir build-mingw/core
           test -f build-mingw/core/wintun.dll
-          test -f build-mingw/VicVPN.exe
+      - name: Package portable
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/package-portable.ps1
-          ls dist/VicVPN-windows-*-portable.zip >/dev/null
+          ls dist/VicVPN-windows-*-portable.zip
+      - name: Build setup EXE
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-setup-exe.ps1
-          ls dist/VicVPN-windows-*-setup.exe >/dev/null
+          ls dist/VicVPN-windows-*-setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: VicVPN-windows-beta

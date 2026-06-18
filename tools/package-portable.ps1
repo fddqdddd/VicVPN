@@ -13,18 +13,23 @@ if (-not (Test-Path $exe)) {
 }
 
 $windeployqt = $null
-$prefix = $env:MSYSTEM_PREFIX
-if ($prefix) {
-    if ($prefix.StartsWith("/")) {
-        $prefix = "C:\msys64" + ($prefix -replace "/", "\")
+foreach ($prefix in @($env:MSYSTEM_PREFIX, "C:\msys64\ucrt64", "$env:RUNNER_TEMP\msys64\ucrt64")) {
+    if (-not $prefix) { continue }
+    $root = $prefix
+    if ($root.StartsWith("/")) {
+        $root = "C:\msys64" + ($root -replace "/", "\")
     }
-    $candidate = Join-Path $prefix "bin\windeployqt.exe"
-    if (Test-Path $candidate) { $windeployqt = $candidate }
+    $candidate = Join-Path $root "bin\windeployqt.exe"
+    if (Test-Path $candidate) {
+        $windeployqt = $candidate
+        break
+    }
 }
 if (-not $windeployqt) {
-    $windeployqt = "C:\msys64\ucrt64\bin\windeployqt.exe"
+    $found = (& where.exe windeployqt 2>$null | Select-Object -First 1)
+    if ($found) { $windeployqt = $found.Trim() }
 }
-if (-not (Test-Path $windeployqt)) {
+if (-not $windeployqt -or -not (Test-Path $windeployqt)) {
     throw "windeployqt not found (install mingw-w64-ucrt-x86_64-qt6-tools)"
 }
 

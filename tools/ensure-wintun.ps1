@@ -56,7 +56,9 @@ if (Test-Path $xrayZip) {
 
 # 3) Download Xray zip from GitHub (includes wintun.dll)
 Write-Host "Downloading Xray zip for wintun.dll..."
-$rel = Invoke-RestMethod -Uri "https://api.github.com/repos/XTLS/Xray-core/releases/latest" -Headers @{ "User-Agent" = "VicVPN" }
+$headers = @{ "User-Agent" = "VicVPN" }
+if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)" }
+$rel = Invoke-RestMethod -Uri "https://api.github.com/repos/XTLS/Xray-core/releases/latest" -Headers $headers
 $asset = $rel.assets | Where-Object { $_.name -match "windows-64.zip" } | Select-Object -First 1
 if (-not $asset) { throw "Xray windows-64.zip not found on GitHub" }
 
