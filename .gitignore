@@ -8,6 +8,7 @@
 *.o
 *.exe
 !/tools/**/*.exe
+!/Dowload_Vic_VPN/**/*.exe
 *.dll
 *.pdb
 *.ilk
