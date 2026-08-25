@@ -26,33 +26,30 @@ jobs:
             mingw-w64-ucrt-x86_64-nlohmann-json
             mingw-w64-ucrt-x86_64-sqlite3
       - name: Fetch cores
-        shell: msys2 {0}
-        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/fetch-all-deps.ps1
+        shell: pwsh
+        run: ./tools/fetch-all-deps.ps1
       - name: CMake build
-        shell: msys2 {0}
+        shell: cmd
         run: |
-          set -euo pipefail
-          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/ucrt64 -B build-mingw
+          set PATH=C:\msys64\ucrt64\bin;%PATH%
+          cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/msys64/ucrt64 -B build-mingw
           cmake --build build-mingw -j8
-          test -f build-mingw/VicVPN.exe
+          if not exist build-mingw\VicVPN.exe exit /b 1
       - name: Ensure wintun
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          set -euo pipefail
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/ensure-wintun.ps1 -OutDir build-mingw/core
-          test -f build-mingw/core/wintun.dll
+          ./tools/ensure-wintun.ps1 -OutDir build-mingw/core
+          if (-not (Test-Path build-mingw/core/wintun.dll)) { throw "wintun.dll missing" }
       - name: Package portable
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          set -euo pipefail
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/package-portable.ps1
-          ls dist/VicVPN-windows-*-portable.zip
+          ./tools/package-portable.ps1
+          if (-not (Test-Path dist/VicVPN-windows-*-portable.zip)) { throw "portable zip missing" }
       - name: Build setup EXE
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          set -euo pipefail
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/build-setup-exe.ps1
-          ls dist/VicVPN-windows-*-setup.exe
+          ./tools/build-setup-exe.ps1
+          if (-not (Test-Path dist/VicVPN-windows-*-setup.exe)) { throw "setup exe missing" }
       - uses: actions/upload-artifact@v4
         with:
           name: VicVPN-windows-beta
