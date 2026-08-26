@@ -45,7 +45,7 @@ static bool isPhysicalAdapterUp(const IP_ADAPTER_ADDRESSES* adapter) {
 }
 
 static IP_ADAPTER_ADDRESSES* enumerateAdapters(std::vector<BYTE>& buffer) {
-    ULONG size = 16 * 1024;
+    ULONG size = 32 * 1024;
     buffer.resize(size);
     auto* addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
     const ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;

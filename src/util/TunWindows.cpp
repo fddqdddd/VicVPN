@@ -77,7 +77,7 @@ void TunWindows::purgeWintunPool() {
                 logDiag(QString("removed wintun pool %1").arg(path));
         }
     }
-    QProcess::execute("netsh", {"interface", "set", "interface", "name=vicvpn0", "admin=disabled"});
+    QProcess::execute("netsh.exe", {"interface", "set", "interface", "name=vicvpn0", "admin=disabled"});
 }
 
 static IP_ADAPTER_ADDRESSES* enumerateAdapters(std::vector<BYTE>& buffer) {
@@ -122,7 +122,7 @@ void TunWindows::cleanupStaleDevices() {
             if (!looksLikeWintun(a))
                 continue;
             const QString friendly = adapterFriendly(a);
-            QProcess::execute("netsh",
+            QProcess::execute("netsh.exe",
                               {"interface", "set", "interface", QString("name=%1").arg(friendly),
                                "admin=disabled"});
             logDiag(QString("disabled wintun adapter %1").arg(friendly));
