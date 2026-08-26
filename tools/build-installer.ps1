@@ -1,34 +1,42 @@
 param(
-    [string]$IssFile = "installer\VicVPN.iss"
+    [string]$PortableDir = "dist\VicVPN-portable",
+    [string]$OutZip = ""
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
-$iss = Join-Path $root $IssFile
-$version = & (Join-Path $PSScriptRoot "get-version.ps1") -Root $root
+$projectRoot = Split-Path $PSScriptRoot -Parent
+$version = & (Join-Path $PSScriptRoot "get-version.ps1") -Root $projectRoot
+if (-not $OutZip) {
+    $OutZip = Join-Path $projectRoot "dist\VicVPN-windows-$version-setup.zip"
+}
 
-$portable = Join-Path $root "dist\VicVPN-portable"
+$portable = Join-Path $projectRoot $PortableDir
 if (-not (Test-Path (Join-Path $portable "VicVPN.exe"))) {
     & (Join-Path $PSScriptRoot "package-portable.ps1")
+    $portable = Join-Path $projectRoot $PortableDir
 }
 
-$iscc = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
+$staging = Join-Path $projectRoot "dist\setup-staging"
+if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-if ($iscc) {
-    Write-Host "Building Inno Setup installer..."
-    Push-Location (Split-Path $iss -Parent)
-    & $iscc "/DMyAppVersion=$version" (Split-Path $iss -Leaf)
-    Pop-Location
-    $innoOut = Join-Path $root "dist\VicVPN-windows-$version-setup.exe"
-    if (Test-Path $innoOut) {
-        Write-Host "[OK] Inno installer: $innoOut"
-        exit 0
-    }
-}
+robocopy $portable $staging /MIR /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed: $LASTEXITCODE" }
 
-Write-Host "Inno Setup not found - building setup EXE..."
-& (Join-Path $PSScriptRoot "build-setup-exe.ps1")
+Copy-Item (Join-Path $projectRoot "installer\Install-VicVPN.ps1") $staging -Force
+Copy-Item (Join-Path $projectRoot "installer\Install-VicVPN.cmd") $staging -Force
+Set-Content -Path (Join-Path $staging "VERSION.txt") -Value $version -Encoding ASCII -NoNewline
+
+$distDir = Split-Path $OutZip -Parent
+New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+if (Test-Path $OutZip) { Remove-Item $OutZip -Force }
+
+Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $OutZip -Force
+
+$sizeMb = [math]::Round((Get-Item $OutZip).Length / 1MB, 1)
+Write-Host "[OK] Installer ZIP: $OutZip ($sizeMb MB)"
+
+Write-Host "`nContents:"
+Get-ChildItem $staging | Select-Object Name, @{N='KB';E={[math]::Round($_.Length/1KB)}} | Format-Table -AutoSize
+
+Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue

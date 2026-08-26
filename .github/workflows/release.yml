@@ -45,16 +45,16 @@ jobs:
         run: |
           ./tools/package-portable.ps1
           if (-not (Test-Path dist/VicVPN-windows-*-portable.zip)) { throw "portable zip missing" }
-      - name: Build setup EXE
+      - name: Build installer ZIP
         shell: pwsh
         run: |
-          ./tools/build-setup-exe.ps1
-          if (-not (Test-Path dist/VicVPN-windows-*-setup.exe)) { throw "setup exe missing" }
+          ./tools/build-installer.ps1
+          if (-not (Test-Path dist/VicVPN-windows-*-setup.zip)) { throw "setup zip missing" }
       - uses: actions/upload-artifact@v4
         with:
           name: VicVPN-windows-beta
           path: |
-            dist/VicVPN-windows-*-setup.exe
+            dist/VicVPN-windows-*-setup.zip
             dist/VicVPN-windows-*-portable.zip
 
   linux:
