@@ -105,22 +105,65 @@ if ($missing.Count -gt 0) {
     }
 }
 
-$finalDlls = Get-ChildItem $out -Filter "*.dll" | Select-Object Name, @{N='KB';E={[math]::Round($_.Length/1KB)}}
+$finalDlls = Get-ChildItem $out -Filter "*.dll" -Recurse | Select-Object Name, @{N='KB';E={[math]::Round($_.Length/1KB)}}
 Write-Host "DLLs in package:"
 $finalDlls | Format-Table -AutoSize
 
-$extraDlls = @("libwinpthread-1.dll", "libsqlite3-0.dll")
-foreach ($dll in $extraDlls) {
-    if (-not (Test-Path (Join-Path $out $dll))) {
-        $src = Join-Path $qtRoot "bin\$dll"
-        if (Test-Path $src) {
-            Copy-Item $src $out -Force
-            Write-Host "[OK] $dll copied from MSYS2"
-        } else {
-            Write-Warning "$dll not found in $qtRoot\bin"
+$systemDlls = @(
+    "KERNEL32.dll","USER32.dll","GDI32.dll","ADVAPI32.dll","SHELL32.dll","WS2_32.dll",
+    "IPHLPAPI.DLL","ole32.dll","oleaut32.dll","comctl32.dll","comdlg32.dll","shlwapi.dll",
+    "version.dll","winmm.dll","dwmapi.dll","uxtheme.dll","ntdll.dll","AUTHZ.dll","MPR.dll",
+    "NETAPI32.dll","USERENV.dll","d3d11.dll","d3d12.dll","DWrite.dll","dxgi.dll","DNSAPI.dll",
+    "Secur32.dll","WINHTTP.dll","bcrypt.dll","CRYPT32.dll","ncrypt.dll","IMM32.dll",
+    "SETUPAPI.dll","SHCORE.dll","WTSAPI32.dll","d3d9.dll","MSWSock.dll","WinTypes.dll",
+    "WindowsCodecs.dll","HID.dll","UIAnimation.dll","dcomp.dll","dwmapi.dll",
+    "propsys.dll","acemapi.dll","cfgmgr32.dll","clbcatq.dll","comsvcs.dll",
+    "devobj.dll","dui70.dll","duser.dll","explorerframe.dll","gdiplus.dll",
+    "globpath.dll","icm32.dll","imm32.dll","mfc42u.dll","mpr.dll","msacm32.dll",
+    "msasn1.dll","mscms.dll","mscomctl.ocx","msimg32.dll","mspaint.exe",
+    "msvcr100.dll","msvcr110.dll","msvcr120.dll","msvcr80.dll","msvcr90.dll",
+    "netutils.dll","npmproxy.dll","profapi.dll","psapi.dll","rasapi32.dll",
+    "rasman.dll","rpcrt4.dll","rtutils.dll","samcli.dll","samlib.dll",
+    "schannel.dll","secur32.dll","sensapi.dll","setupapi.dll","shell32.dll",
+    "shlwapi.dll","sndvolsso.dll","Stdlib.dll","sxs.dll","tpmvsc.dll",
+    "tzres.dll","ucrtbase.dll","urlmon.dll","userenv.dll","usp10.dll",
+    "virtdisk.dll","wintrust.dll","wkscli.dll","wldap32.dll","wtsapi32.dll",
+    "xmllite.dll"
+)
+
+Write-Host "`nResolving transitive DLL dependencies..."
+$msysBin = Join-Path $qtRoot "bin"
+$maxDepth = 3
+for ($depth = 0; $depth -lt $maxDepth; $depth++) {
+    $dlls = Get-ChildItem $out -Filter "*.dll" -Recurse
+    $added = 0
+    foreach ($dll in $dlls) {
+        $output = objdump -x $dll.FullName 2>&1
+        $deps = $output | Select-String "DLL Name" | ForEach-Object { ($_ -split "DLL Name:\s+")[1].Trim() }
+        foreach ($dep in $deps) {
+            if ($dep -in $systemDlls) { continue }
+            $target = Join-Path $out $dep
+            if (Test-Path $target) { continue }
+            $src = Join-Path $msysBin $dep
+            if (Test-Path $src) {
+                Copy-Item $src $out -Force
+                Write-Host "  [depth=$depth] $dep"
+                $added++
+            } else {
+                $winSys = Join-Path $env:SystemRoot\System32 $dep
+                if (-not (Test-Path $winSys)) {
+                    Write-Warning "  $dep not found in MSYS2 or System32"
+                }
+            }
         }
     }
+    if ($added -eq 0) { break }
+    Write-Host "  depth ${depth}: ${added} DLLs added"
 }
+
+$finalDlls2 = Get-ChildItem $out -Filter "*.dll" -Recurse | Select-Object Name, @{N='KB';E={[math]::Round($_.Length/1KB)}}
+Write-Host "`nFinal DLLs in package:"
+$finalDlls2 | Format-Table -AutoSize
 
 Copy-Item (Join-Path $projectRoot "LICENSE") $out -Force
 Copy-Item (Join-Path $projectRoot "docs\USER.ru.md") (Join-Path $out "README.txt") -Force -ErrorAction SilentlyContinue
