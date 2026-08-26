@@ -109,6 +109,19 @@ $finalDlls = Get-ChildItem $out -Filter "*.dll" | Select-Object Name, @{N='KB';E
 Write-Host "DLLs in package:"
 $finalDlls | Format-Table -AutoSize
 
+$extraDlls = @("libwinpthread-1.dll", "libsqlite3-0.dll")
+foreach ($dll in $extraDlls) {
+    if (-not (Test-Path (Join-Path $out $dll))) {
+        $src = Join-Path $qtRoot "bin\$dll"
+        if (Test-Path $src) {
+            Copy-Item $src $out -Force
+            Write-Host "[OK] $dll copied from MSYS2"
+        } else {
+            Write-Warning "$dll not found in $qtRoot\bin"
+        }
+    }
+}
+
 Copy-Item (Join-Path $projectRoot "LICENSE") $out -Force
 Copy-Item (Join-Path $projectRoot "docs\USER.ru.md") (Join-Path $out "README.txt") -Force -ErrorAction SilentlyContinue
 
