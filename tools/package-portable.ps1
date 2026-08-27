@@ -133,15 +133,26 @@ $systemDlls = @(
 
 Write-Host "`nResolving transitive DLL dependencies..."
 $msysBin = Join-Path $qtRoot "bin"
-$maxDepth = 3
+$maxDepth = 4
+
+function Get-NonSystemDeps([string]$FilePath) {
+    $output = objdump -x $FilePath 2>&1
+    return @($output | Select-String "DLL Name" | ForEach-Object { ($_ -split "DLL Name:\s+")[1].Trim() } | Where-Object {
+        ($_ -notin $systemDlls) -and ($_ -notmatch "^api-ms-win-")
+    })
+}
+
+# Include the main exe as a seed so its direct deps are resolved first
+$seeds = @((Join-Path $out "VicVPN.exe"))
+
 for ($depth = 0; $depth -lt $maxDepth; $depth++) {
     $dlls = Get-ChildItem $out -Filter "*.dll" -Recurse
+    $roots = @($seeds) + @($dlls | ForEach-Object { $_.FullName })
+    $seeds = @()
     $added = 0
-    foreach ($dll in $dlls) {
-        $output = objdump -x $dll.FullName 2>&1
-        $deps = $output | Select-String "DLL Name" | ForEach-Object { ($_ -split "DLL Name:\s+")[1].Trim() }
+    foreach ($file in $roots) {
+        $deps = Get-NonSystemDeps $file
         foreach ($dep in $deps) {
-            if ($dep -in $systemDlls) { continue }
             $target = Join-Path $out $dep
             if (Test-Path $target) { continue }
             $src = Join-Path $msysBin $dep
@@ -149,6 +160,7 @@ for ($depth = 0; $depth -lt $maxDepth; $depth++) {
                 Copy-Item $src $out -Force
                 Write-Host "  [depth=$depth] $dep"
                 $added++
+                $seeds += $target
             } else {
                 $winSys = Join-Path $env:SystemRoot\System32 $dep
                 if (-not (Test-Path $winSys)) {
@@ -164,6 +176,20 @@ for ($depth = 0; $depth -lt $maxDepth; $depth++) {
 $finalDlls2 = Get-ChildItem $out -Filter "*.dll" -Recurse | Select-Object Name, @{N='KB';E={[math]::Round($_.Length/1KB)}}
 Write-Host "`nFinal DLLs in package:"
 $finalDlls2 | Format-Table -AutoSize
+
+# Guarantee the sqlite runtime DLL is present
+$exeDeps = Get-NonSystemDeps (Join-Path $out "VicVPN.exe")
+$exeDeps | ForEach-Object {
+    if (-not (Test-Path (Join-Path $out $_))) {
+        $src = Join-Path $msysBin $_
+        if (Test-Path $src) {
+            Copy-Item $src $out -Force
+            Write-Host "[OK] final: $_ copied"
+        } else {
+            throw "Required dependency of VicVPN.exe missing: $_"
+        }
+    }
+}
 
 Copy-Item (Join-Path $projectRoot "LICENSE") $out -Force
 Copy-Item (Join-Path $projectRoot "docs\USER.ru.md") (Join-Path $out "README.txt") -Force -ErrorAction SilentlyContinue
