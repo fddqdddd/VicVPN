@@ -106,12 +106,26 @@ target_link_libraries(VicVPN PRIVATE
     Qt6::Network
     Qt6::Svg
     nlohmann_json::nlohmann_json
-    sqlite3
 )
 
 if(WIN32)
     target_link_libraries(VicVPN PRIVATE ws2_32 iphlpapi shell32 advapi32)
     target_include_directories(VicVPN PRIVATE C:/msys64/ucrt64/include)
+
+    # Prefer static libs (libsqlite3.a) over import libs (libsqlite3.dll.a)
+    set(SQLITE3_A "C:/msys64/ucrt64/lib/libsqlite3.a")
+    if(EXISTS "${SQLITE3_A}")
+        message(STATUS "Linking sqlite3 statically: ${SQLITE3_A}")
+        target_link_libraries(VicVPN PRIVATE "${SQLITE3_A}")
+    else()
+        target_link_libraries(VicVPN PRIVATE sqlite3)
+    endif()
+
+    set(WINPTHREAD_A "C:/msys64/ucrt64/lib/libwinpthread.a")
+    if(EXISTS "${WINPTHREAD_A}")
+        message(STATUS "Linking winpthread statically: ${WINPTHREAD_A}")
+        target_link_libraries(VicVPN PRIVATE "${WINPTHREAD_A}")
+    endif()
 endif()
 
 if(WIN32)
