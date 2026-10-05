@@ -1,4 +1,5 @@
 #include "vicvpn/parser/UriParser.h"
+#include "vicvpn/parser/ImportService.h"
 #include "vicvpn/util/StringUtil.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -7,6 +8,51 @@
 #include <QUrlQuery>
 
 namespace vicvpn {
+
+namespace {
+
+QString schemeOf(const QUrl& u) {
+    return u.scheme().toLower();
+}
+
+int jsonToInt(const QJsonValue& v) {
+    if (v.isDouble())
+        return v.toInt();
+    if (v.isString())
+        return v.toString().toInt();
+    return 0;
+}
+
+// Tolerant base64 for config payloads: strips whitespace, accepts url-safe alphabet.
+QByteArray decodeConfigBase64(const QString& raw, const QString& what) {
+    QString s = raw.trimmed();
+    const int hash = s.indexOf(QLatin1Char('#'));
+    if (hash >= 0)
+        s = s.left(hash);
+    s.remove(QRegularExpression(QStringLiteral("\\s")));
+    if (s.isEmpty()) {
+        ParseLog::detail(QStringLiteral("%1: empty payload").arg(what));
+        return {};
+    }
+
+    QByteArray dec = QByteArray::fromBase64(s.toUtf8(), QByteArray::Base64Encoding);
+    const bool looksTextful =
+        dec.contains("://") || dec.contains('{') || dec.contains('"') || dec.contains(':');
+    if (!looksTextful) {
+        const QByteArray alt = base64UrlDecode(s);
+        if (alt.size() > dec.size())
+            dec = alt;
+    }
+
+    ParseLog::detail(QStringLiteral("%1: raw_len=%2 decoded_len=%3 starts_json=%4")
+                         .arg(what)
+                         .arg(s.size())
+                         .arg(dec.size())
+                         .arg(dec.trimmed().startsWith('{') ? "yes" : "no"));
+    if (dec.trimmed().isEmpty())
+        ParseLog::detail(QStringLiteral("%1: decoded payload is empty").arg(what));
+    return dec;
+}
 
 static ServerProfile baseProfile(Protocol proto, const QString& raw) {
     ServerProfile p;
@@ -122,11 +168,15 @@ static nlohmann::json vlessOutbound(const QString& uuid, const QString& host, in
 
 static std::optional<ServerProfile> parseVless(const QString& uri) {
     QUrl u(uri);
-    if (!u.isValid() || u.scheme() != "vless")
-        return std::nullopt;
-    auto p = baseProfile(Protocol::Vless, uri);
+    if (!u.isValid() || schemeOf(u) != "vless") return std::nullopt;
     const QString uuid = urlDecode(u.userName());
     const QString host = u.host();
+    if (uuid.isEmpty() || host.isEmpty()) {
+        ParseLog::detail(QStringLiteral("vless: missing uuid or host (user='%1' host='%2')")
+                             .arg(u.userName()).arg(host));
+        return std::nullopt;
+    }
+    auto p = baseProfile(Protocol::Vless, uri);
     const int port = u.port(443);
     const QUrlQuery q = mergedVlessQuery(uri, u);
     p.xrayOutbound = vlessOutbound(uuid, host, port, q);
@@ -138,43 +188,90 @@ static std::optional<ServerProfile> parseVless(const QString& uri) {
 }
 
 static std::optional<ServerProfile> parseVmess(const QString& uri) {
-    if (!uri.startsWith("vmess://", Qt::CaseInsensitive)) return std::nullopt;
-    const QByteArray payload = base64UrlDecode(uri.mid(8));
+    if (!uri.startsWith("vmess://", Qt::CaseInsensitive))
+        return std::nullopt;
+
+    const QByteArray payload = decodeConfigBase64(uri.mid(8), QStringLiteral("vmess payload"));
+    if (payload.isEmpty()) {
+        ParseLog::detail(QStringLiteral("vmess: payload decode failed"));
+        return std::nullopt;
+    }
+
     const auto doc = QJsonDocument::fromJson(payload);
-    if (!doc.isObject()) return std::nullopt;
+    if (!doc.isObject()) {
+        ParseLog::detail(QStringLiteral("vmess: not a JSON object after base64 (first 120 bytes: %1)")
+                             .arg(QString::fromUtf8(payload.left(120)).replace('\n', ' ')));
+        return std::nullopt;
+    }
+
     const QJsonObject o = doc.object();
+    const QString address = o.value("add").toString();
+    if (address.isEmpty()) {
+        ParseLog::detail(QStringLiteral("vmess: JSON has no 'add' field, keys=%1")
+                             .arg(QStringList(o.keys()).join(',')));
+        return std::nullopt;
+    }
+    const int port = jsonToInt(o.value("port"));
+    if (port <= 0 || port > 65535) {
+        ParseLog::detail(QStringLiteral("vmess: bad 'port' value '%1'")
+                             .arg(o.value("port").toVariant().toString()));
+        return std::nullopt;
+    }
+    if (o.value("id").toString().isEmpty()) {
+        ParseLog::detail(QStringLiteral("vmess: JSON has no 'id' field"));
+        return std::nullopt;
+    }
+
     auto p = baseProfile(Protocol::Vmess, uri);
     nlohmann::json out;
     out["protocol"] = "vmess";
     out["tag"] = "proxy";
     nlohmann::json user;
     user["id"] = o.value("id").toString().toStdString();
-    user["alterId"] = o.value("aid").toInt();
+    user["alterId"] = jsonToInt(o.value("aid"));
     user["security"] = o.value("scy").toString("auto").toStdString();
-    out["settings"] = {{"vnext", nlohmann::json::array({{
-        {"address", o.value("add").toString().toStdString()},
-        {"port", o.value("port").toString().toInt()},
-        {"users", nlohmann::json::array({user})}
-    }})}};
+    nlohmann::json vnext;
+    vnext["address"] = address.toStdString();
+    vnext["port"] = port;
+    vnext["users"] = nlohmann::json::array({user});
+    out["settings"] = {{"vnext", nlohmann::json::array({vnext})}};
+
     nlohmann::json stream;
-    stream["network"] = o.value("net").toString("tcp").toStdString();
-    if (o.value("tls").toString() == "tls") {
+    const QString net = o.value("net").toString(QStringLiteral("tcp"));
+    stream["network"] = net.toStdString();
+
+    const QJsonValue tlsValue = o.value("tls");
+    const bool tlsOn = tlsValue.isBool() ? tlsValue.toBool()
+                                         : (tlsValue.toString().compare("tls", Qt::CaseInsensitive) == 0 ||
+                                            tlsValue.toString() == "true");
+    const QString hostHeader = o.value("host").toString();
+    if (tlsOn) {
         stream["security"] = "tls";
         nlohmann::json tls;
         tls["enabled"] = true;
-        tls["serverName"] = o.value("sni").toString(o.value("host").toString()).toStdString();
+        tls["serverName"] = o.value("sni").toString(hostHeader).toStdString();
+        if (!hostHeader.isEmpty())
+            tls["alpn"] = nlohmann::json::array({hostHeader.toStdString()});
         stream["tlsSettings"] = tls;
     }
-    if (o.value("net").toString() == "ws") {
-        stream["wsSettings"] = {
-            {"path", o.value("path").toString().toStdString()},
-            {"headers", {{"Host", o.value("host").toString().toStdString()}}}
-        };
+
+    if (net == "ws") {
+        nlohmann::json ws;
+        ws["path"] = o.value("path").toString(QStringLiteral("/")).toStdString();
+        if (!hostHeader.isEmpty())
+            ws["headers"] = {{"Host", hostHeader.toStdString()}};
+        stream["wsSettings"] = ws;
+    } else if (net == "grpc") {
+        stream["grpcSettings"] = {
+            {"serviceName", o.value("path").toString().toStdString()}};
     }
+
     out["streamSettings"] = stream;
     p.xrayOutbound = out;
-    p.name = o.value("ps").toString(o.value("add").toString());
+    p.name = o.value("ps").toString(address);
     p.remark = "VMess";
+    ParseLog::detail(QStringLiteral("vmess: ok add=%1 port=%2 net=%3 tls=%4")
+                         .arg(address).arg(port).arg(net).arg(tlsOn ? "on" : "off"));
     return p;
 }
 
@@ -269,10 +366,14 @@ static std::optional<ServerProfile> parseSs(const QString& uri) {
 
 static std::optional<ServerProfile> parseTrojan(const QString& uri) {
     QUrl u(uri);
-    if (!u.isValid() || u.scheme() != "trojan") return std::nullopt;
+    if (!u.isValid() || schemeOf(u) != "trojan") return std::nullopt;
+    const QString host = u.host();
+    if (host.isEmpty()) {
+        ParseLog::detail(QStringLiteral("trojan: no host in '%1'").arg(u.toString().left(80)));
+        return std::nullopt;
+    }
     auto p = baseProfile(Protocol::Trojan, uri);
     const QString pass = urlDecode(u.userName());
-    const QString host = u.host();
     const int port = u.port(443);
     QUrlQuery q(u);
     nlohmann::json stream;
@@ -304,7 +405,12 @@ static std::optional<ServerProfile> parseTrojan(const QString& uri) {
 
 static std::optional<ServerProfile> parseSocks(const QString& uri) {
     QUrl u(uri);
-    if (!u.isValid() || (u.scheme() != "socks" && u.scheme() != "socks5")) return std::nullopt;
+    const QString scheme = schemeOf(u);
+    if (!u.isValid() || (scheme != "socks" && scheme != "socks5")) return std::nullopt;
+    if (u.host().isEmpty()) {
+        ParseLog::detail(QStringLiteral("socks: no host in '%1'").arg(u.toString().left(80)));
+        return std::nullopt;
+    }
     auto p = baseProfile(Protocol::Socks, uri);
     nlohmann::json servers = nlohmann::json::array({{
         {"address", u.host().toStdString()},
@@ -361,8 +467,7 @@ static std::optional<ServerProfile> parseSsh(const QString& uri) {
     return p;
 }
 
-std::optional<ServerProfile> UriParser::parse(const QString& input) {
-    const QString s = trimUri(input);
+static std::optional<ServerProfile> parseScheme(const QString& s) {
     if (s.startsWith("vless://", Qt::CaseInsensitive)) return parseVless(s);
     if (s.startsWith("vmess://", Qt::CaseInsensitive)) return parseVmess(s);
     if (s.startsWith("ss://", Qt::CaseInsensitive)) return parseSs(s);
@@ -372,16 +477,45 @@ std::optional<ServerProfile> UriParser::parse(const QString& input) {
     if (s.startsWith("ssh://", Qt::CaseInsensitive)) return parseSsh(s);
     if (s.startsWith("hy2://", Qt::CaseInsensitive) || s.startsWith("hysteria2://", Qt::CaseInsensitive))
         return Hy2UriParser::parse(s);
+    ParseLog::detail(QStringLiteral("unhandled scheme '%1'").arg(s.left(24)));
     return std::nullopt;
+}
+
+} // namespace
+
+std::optional<ServerProfile> UriParser::parse(const QString& input) {
+    const QString s = trimUri(input);
+    const std::optional<ServerProfile> result = parseScheme(s);
+    if (result)
+        ParseLog::attempt(s, QStringLiteral("OK -> %1").arg(result->protocolLabel()));
+    else
+        ParseLog::attempt(s, QStringLiteral("FAILED (no parser accepted it)"));
+    return result;
+}
+
+std::optional<ServerProfile> UriParser::parseScheme(const QString& s) {
+    return ::vicvpn::parseScheme(s);
 }
 
 std::vector<ServerProfile> UriParser::parseMany(const QString& blob) {
     std::vector<ServerProfile> out;
-    const auto lines = blob.split(QRegularExpression(R"([\r\n]+)"), Qt::SkipEmptyParts);
+    QString text = blob;
+    if (!text.isEmpty() && text.at(0) == QChar(0xFEFF))
+        text.remove(0, 1);
+
+    const auto lines = text.split(QRegularExpression(R"([\r\n]+)"), Qt::SkipEmptyParts);
+    int total = 0;
     for (const auto& line : lines) {
         const QString t = trimUri(line);
-        if (t.isEmpty()) continue;
-        if (auto p = parse(t)) out.push_back(*p);
+        if (t.isEmpty())
+            continue;
+        ++total;
+        if (auto p = parse(t))
+            out.push_back(*p);
+    }
+    if (total > 0 && out.size() < total) {
+        ParseLog::detail(QStringLiteral("bulk parse: %1 of %2 lines failed")
+                             .arg(total - out.size()).arg(total));
     }
     return out;
 }

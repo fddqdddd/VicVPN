@@ -60,6 +60,7 @@ set(VICVPN_SOURCES
     src/parser/OutlineConfigParser.cpp
     src/parser/SsconfCountry.cpp
     src/parser/ImportService.cpp
+    src/parser/ParseLog.cpp
     src/tunnel/SshTunnel.cpp
     src/storage/Database.cpp
     src/model/ServerProfile.cpp
@@ -100,7 +101,39 @@ target_include_directories(VicVPN PRIVATE
     ${CMAKE_BINARY_DIR}/generated
 )
 
-target_compile_definitions(VicVPN PRIVATE VICVPN_CHANNEL="beta")
+# Build identity so users can tell which commit produced a running binary.
+# This is what the import log prints on startup.
+find_package(Git QUIET)
+set(VICVPN_BUILD_ID "dev")
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE VICVPN_GIT_SHA
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(VICVPN_GIT_SHA)
+        set(VICVPN_BUILD_ID "${VICVPN_GIT_SHA}-dirty")
+    endif()
+elseif(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE VICVPN_GIT_SHA
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(VICVPN_GIT_SHA)
+        set(VICVPN_BUILD_ID "${VICVPN_GIT_SHA}-dirty")
+    endif()
+endif()
+message(STATUS "VicVPN build id: ${VICVPN_BUILD_ID}")
+
+target_compile_definitions(VicVPN PRIVATE
+    VICVPN_CHANNEL="beta"
+    VICVPN_BUILD_ID="${VICVPN_BUILD_ID}"
+)
 
 target_link_libraries(VicVPN PRIVATE
     Qt6::Widgets
@@ -191,6 +224,7 @@ if(VICVPN_BUILD_TESTS)
         src/parser/OutlineConfigParser.cpp
         src/parser/SsconfCountry.cpp
         src/parser/ImportService.cpp
+        src/parser/ParseLog.cpp
         src/app/I18n.cpp
         src/model/ServerProfile.cpp
         src/util/StringUtil.cpp
@@ -201,6 +235,9 @@ if(VICVPN_BUILD_TESTS)
         ${CMAKE_BINARY_DIR}/generated
     )
     target_link_libraries(vicvpn_parser_smoke PRIVATE Qt6::Core Qt6::Network nlohmann_json::nlohmann_json)
+    target_compile_definitions(vicvpn_parser_smoke PRIVATE
+        VICVPN_BUILD_ID="${VICVPN_BUILD_ID}"
+    )
     if(WIN32)
         target_include_directories(vicvpn_parser_smoke PRIVATE C:/msys64/ucrt64/include)
         target_link_libraries(vicvpn_parser_smoke PRIVATE C:/msys64/ucrt64/lib/libsqlite3.a)

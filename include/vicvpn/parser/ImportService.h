@@ -10,6 +10,19 @@ namespace vicvpn {
 QByteArray httpGetSubscription(const QString& url, QString* error = nullptr,
                                int timeoutMs = 30000, const QByteArray& userAgent = "VicVPN/0.1");
 
+class ParseLog {
+public:
+    static void init();
+    /** Logs an import attempt: detected scheme, masked input and outcome. */
+    static void attempt(const QString& input, const QString& result);
+    static void detail(const QString& text);
+    static QString filePath();
+    /** Returns "scheme" (lowercased, without "://") or "unknown". */
+    static QString detectScheme(const QString& input);
+    /** Hides passwords/UUIDs/keys so logs can be shared safely. */
+    static QString mask(const QString& input);
+};
+
 class SubscriptionBodyDecoder {
 public:
     static std::vector<ServerProfile> decode(const QByteArray& raw, QString* error = nullptr);

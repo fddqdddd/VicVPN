@@ -135,15 +135,48 @@ std::vector<ServerProfile> ImportService::importText(const QString& text, QStrin
         if (error) *error = "Empty input";
         return {};
     }
-    if (t.startsWith("http://", Qt::CaseInsensitive) || t.startsWith("https://", Qt::CaseInsensitive))
-        return SubscriptionFetcher::fetch(t, error);
-    if (SsconfCountry::isSsconfUri(t))
-        return SsconfResolver::resolve(t, error, options.ssconfCountry);
-    if (t.startsWith('{') || t.startsWith('['))
-        return importJson(t, error);
+    if (t.startsWith("http://", Qt::CaseInsensitive) || t.startsWith("https://", Qt::CaseInsensitive)) {
+        ParseLog::attempt(t, QStringLiteral("subscription fetch"));
+        auto list = SubscriptionFetcher::fetch(t, error);
+        ParseLog::detail(QStringLiteral("subscription '%1' -> %2 profile(s)")
+                             .arg(ParseLog::detectScheme(t)).arg(list.size()));
+        return list;
+    }
+    if (SsconfCountry::isSsconfUri(t)) {
+        ParseLog::attempt(t, QStringLiteral("ssconf resolve"));
+        auto list = SsconfResolver::resolve(t, error, options.ssconfCountry);
+        ParseLog::detail(QStringLiteral("ssconf -> %1 profile(s)").arg(list.size()));
+        return list;
+    }
+    if (t.startsWith('{') || t.startsWith('[')) {
+        auto list = importJson(t, error);
+        ParseLog::attempt(t, QStringLiteral("json import -> %1 profile(s)").arg(list.size()));
+        return list;
+    }
+    // A pasted block may hold many keys: try bulk first, otherwise a single
+    // vless:// on line 1 would win and hide every other line.
+    if (t.contains(QLatin1Char('\n')) || t.contains(QLatin1Char('\r'))) {
+        auto many = UriParser::parseMany(t);
+        if (!many.empty())
+            return many;
+    }
+
     if (auto one = UriParser::parse(t))
         return {*one};
-    return UriParser::parseMany(t);
+
+    const auto many = UriParser::parseMany(t);
+    if (!many.empty())
+        return many;
+
+    if (error && error->isEmpty()) {
+        const QString scheme = ParseLog::detectScheme(t);
+        *error = scheme == QLatin1String("unknown")
+            ? QStringLiteral("Не распознан формат. Ожидается ключ вида vless://, vmess://, ss://, "
+                             "trojan://, socks://, hy2://, ssh:// либо ссылка https:// на подписку.")
+            : QStringLiteral("Формат «%1://» не удалось разобрать. Подробности в файле import.log")
+                  .arg(scheme);
+    }
+    return {};
 }
 
 static ServerProfile fromXrayOutbound(const nlohmann::json& ob, const QString& raw) {

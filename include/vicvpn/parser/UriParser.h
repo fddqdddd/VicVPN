@@ -11,6 +11,8 @@ class UriParser {
 public:
     static std::optional<ServerProfile> parse(const QString& input);
     static std::vector<ServerProfile> parseMany(const QString& blob);
+    /** Scheme-only routing, no logging. Exposed for tests and diagnostics. */
+    static std::optional<ServerProfile> parseScheme(const QString& trimmedUri);
 };
 
 class Hy2UriParser {

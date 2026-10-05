@@ -49,6 +49,7 @@ void I18n::loadRu() {
     ru_["import.manual"] = "Вручную";
     ru_["import.ok"] = "Импорт";
     ru_["import.cancel"] = "Отмена";
+ru_["import.log"] = "Открыть папку с логом импорта (import.log)";
     ru_["import.country"] = "Страна (ssconf)";
     ru_["import.change_country"] = "Сменить страну";
     ru_["settings.title"] = "Настройки";
@@ -110,6 +111,7 @@ void I18n::loadEn() {
     en_["import.manual"] = "Manual";
     en_["import.ok"] = "Import";
     en_["import.cancel"] = "Cancel";
+en_["import.log"] = "Open import log folder (import.log)";
     en_["import.country"] = "Country (ssconf)";
     en_["import.change_country"] = "Change country";
     en_["settings.title"] = "Settings";

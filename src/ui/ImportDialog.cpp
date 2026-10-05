@@ -5,7 +5,10 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -61,6 +64,19 @@ ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
     layout->addWidget(tabs_);
     layout->addWidget(countryLabel_);
     layout->addWidget(countryCombo_);
+
+    auto* logBtn = new QPushButton(VTR("import.log"));
+    connect(logBtn, &QPushButton::clicked, this, [this]() {
+        const QString path = ParseLog::filePath();
+        if (!QFileInfo::exists(path)) {
+            QMessageBox::information(this, VTR("import.log"),
+                                     QString("Файл %1\n\nЛог ещё не создан — сделайте попытку импорта.")
+                                         .arg(path));
+            return;
+        }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
+    });
+    layout->addWidget(logBtn);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     buttons->button(QDialogButtonBox::Ok)->setText(VTR("import.ok"));
