@@ -31,6 +31,10 @@ void appendLine(const QString& line) {
         if (!f.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
             return;
     }
+    // Notepad on Windows assumes the ANSI codepage without a BOM, which turns
+    // Russian log lines into mojibake. Users read these files, so mark them UTF-8.
+    if (f.size() == 0)
+        f.write("\xEF\xBB\xBF");
     f.write(line.toUtf8());
     f.write("\n");
 }

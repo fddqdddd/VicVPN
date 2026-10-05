@@ -1,4 +1,5 @@
 #include "vicvpn/ui/AboutDialog.h"
+#include "vicvpn/ui/UpdateDialog.h"
 #include "vicvpn/app/I18n.h"
 #include "vicvpn/app/Version.h"
 #include <QDialogButtonBox>
@@ -45,6 +46,14 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
     license->setAlignment(Qt::AlignCenter);
     license->setStyleSheet("color: #888;");
     layout->addWidget(license);
+
+    auto* updateBtn = new QPushButton(VTR("about.check_update"));
+    updateBtn->setToolTip(VTR("about.check_update"));
+    layout->addWidget(updateBtn);
+    connect(updateBtn, &QPushButton::clicked, this, [this]() {
+        if (UpdateDialog::checkAndOffer(this))
+            accept();
+    });
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
     buttons->button(QDialogButtonBox::Ok)->setText("OK");

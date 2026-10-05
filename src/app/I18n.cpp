@@ -83,8 +83,11 @@ ru_["import.log"] = "Открыть папку с логом импорта (imp
     ru_["tray.quit"] = "Выход";
     ru_["about.title"] = "О программе";
     ru_["about.version"] = "Версия";
-    ru_["about.description"] = "VPN/прокси-клиент (beta). Ядра: sing-box, Xray, Hysteria2. TUN full tunnel.";
+    ru_["about.description"] = "VPN/прокси-клиент (alpha). Ядра: sing-box, Xray, Hysteria2. TUN full tunnel.";
     ru_["about.license"] = "Лицензия: GPL-3.0";
+ru_["about.check_update"] = "Проверить обновления";
+ru_["update.title"] = "Обновление VicVPN";
+ru_["update.downloading"] = "Загрузка обновления...";
     ru_["settings.minimize_tray"] = "Сворачивать в трей";
     ru_["tray.minimized"] = "Приложение свёрнуто в трей";
 }
@@ -145,8 +148,11 @@ en_["import.log"] = "Open import log folder (import.log)";
     en_["tray.quit"] = "Exit";
     en_["about.title"] = "About";
     en_["about.version"] = "Version";
-    en_["about.description"] = "VPN/proxy client (beta). Cores: sing-box, Xray, Hysteria2. TUN full tunnel.";
+    en_["about.description"] = "VPN/proxy client (alpha). Cores: sing-box, Xray, Hysteria2. TUN full tunnel.";
     en_["about.license"] = "License: GPL-3.0";
+en_["about.check_update"] = "Check for updates";
+en_["update.title"] = "VicVPN update";
+en_["update.downloading"] = "Downloading update...";
     en_["settings.minimize_tray"] = "Minimize to tray";
     en_["tray.minimized"] = "Application minimized to tray";
 }

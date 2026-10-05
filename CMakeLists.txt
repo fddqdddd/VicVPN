@@ -61,6 +61,8 @@ set(VICVPN_SOURCES
     src/parser/SsconfCountry.cpp
     src/parser/ImportService.cpp
     src/parser/ParseLog.cpp
+    src/update/UpdateChecker.cpp
+    src/ui/UpdateDialog.cpp
     src/tunnel/SshTunnel.cpp
     src/storage/Database.cpp
     src/model/ServerProfile.cpp
@@ -105,7 +107,7 @@ target_include_directories(VicVPN PRIVATE
 # This is what the import log prints on startup.
 find_package(Git QUIET)
 set(VICVPN_BUILD_ID "dev")
-if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+if(GIT_FOUND)
     execute_process(
         COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -114,25 +116,28 @@ if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
         ERROR_QUIET
     )
     if(VICVPN_GIT_SHA)
-        set(VICVPN_BUILD_ID "${VICVPN_GIT_SHA}-dirty")
-    endif()
-elseif(GIT_FOUND)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE VICVPN_GIT_SHA
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    if(VICVPN_GIT_SHA)
-        set(VICVPN_BUILD_ID "${VICVPN_GIT_SHA}-dirty")
+        set(VICVPN_BUILD_ID "${VICVPN_GIT_SHA}")
+        # Only tag local edits. A release build has to be distinguishable from
+        # a work-in-progress one, otherwise the marker tells us nothing.
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            OUTPUT_VARIABLE VICVPN_GIT_DIRTY
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(VICVPN_GIT_DIRTY)
+            set(VICVPN_BUILD_ID "${VICVPN_BUILD_ID}-dirty")
+        endif()
     endif()
 endif()
 message(STATUS "VicVPN build id: ${VICVPN_BUILD_ID}")
 
 target_compile_definitions(VicVPN PRIVATE
-    VICVPN_CHANNEL="beta"
+    VICVPN_CHANNEL="alpha"
     VICVPN_BUILD_ID="${VICVPN_BUILD_ID}"
+    VICVPN_REPO_OWNER="fddqdddd"
+    VICVPN_REPO_NAME="VicVPN"
 )
 
 target_link_libraries(VicVPN PRIVATE
@@ -225,6 +230,7 @@ if(VICVPN_BUILD_TESTS)
         src/parser/SsconfCountry.cpp
         src/parser/ImportService.cpp
         src/parser/ParseLog.cpp
+        src/update/UpdateChecker.cpp
         src/app/I18n.cpp
         src/model/ServerProfile.cpp
         src/util/StringUtil.cpp
@@ -237,6 +243,8 @@ if(VICVPN_BUILD_TESTS)
     target_link_libraries(vicvpn_parser_smoke PRIVATE Qt6::Core Qt6::Network nlohmann_json::nlohmann_json)
     target_compile_definitions(vicvpn_parser_smoke PRIVATE
         VICVPN_BUILD_ID="${VICVPN_BUILD_ID}"
+        VICVPN_REPO_OWNER="fddqdddd"
+        VICVPN_REPO_NAME="VicVPN"
     )
     if(WIN32)
         target_include_directories(vicvpn_parser_smoke PRIVATE C:/msys64/ucrt64/include)

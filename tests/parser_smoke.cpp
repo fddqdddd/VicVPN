@@ -1,5 +1,6 @@
 #include "vicvpn/parser/UriParser.h"
 #include "vicvpn/parser/ImportService.h"
+#include "vicvpn/update/UpdateChecker.h"
 #include <QCoreApplication>
 #include <QByteArray>
 #include <QString>
@@ -316,6 +317,17 @@ int main(int argc, char** argv) {
         QString err;
         const auto p = ImportService::importText("  \"ssh://root:pw@1.2.3.4:22#Quoted\"  ", &err);
         check(p.size() == 1, "wrapped in quotes/spaces still imports");
+    }
+
+    {
+        check(UpdateChecker::isNewer("v0.1.1", "0.1.0-alpha"), "0.1.1 newer than 0.1.0-alpha");
+        check(UpdateChecker::isNewer("v0.1.0", "0.1.0-alpha"), "final beats prerelease of same version");
+        check(!UpdateChecker::isNewer("v0.1.0-alpha", "0.1.0-alpha"), "same version not newer");
+        check(!UpdateChecker::isNewer("v0.0.9", "0.1.0-alpha"), "older patch not newer");
+        check(UpdateChecker::isNewer("v1.0.0", "0.9.9-alpha"), "major bump newer");
+        check(UpdateChecker::isNewer("v0.2.0-alpha", "0.1.0-alpha"), "minor prerelease newer");
+        check(!UpdateChecker::isNewer("garbage", "0.1.0-alpha"), "garbage tag ignored");
+        check(!UpdateChecker::currentVersion().isEmpty(), "current version known");
     }
 
     std::printf("\n%s: %d failure(s)\n", g_fail == 0 ? "PASS" : "FAIL", g_fail);

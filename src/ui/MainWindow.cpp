@@ -1,4 +1,5 @@
 #include "vicvpn/ui/MainWindow.h"
+#include "vicvpn/ui/UpdateDialog.h"
 #include "vicvpn/ui/ImportDialog.h"
 #include "vicvpn/ui/SettingsDialog.h"
 #include "vicvpn/ui/AboutDialog.h"
@@ -63,6 +64,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     }
 
     QTimer::singleShot(0, this, [this]() { fetchDisplayIp(false); });
+
+    // Update check runs off the GUI thread, so a slow or unreachable GitHub
+    // only delays this one-shot, never the window.
+    QTimer::singleShot(8000, this, [this]() { UpdateDialog::checkSilently(this); });
 }
 
 void MainWindow::setupUi() {
