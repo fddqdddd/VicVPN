@@ -409,7 +409,9 @@ void MainWindow::onServerContextMenu(const QPoint& pos) {
                 QString err;
                 auto servers = SsconfResolver::resolve(profile->subscriptionUrl, &err, profile->countryCode);
                 if (servers.empty()) {
-                    QMessageBox::warning(this, VTR("app.title"), err.isEmpty() ? "Parse failed" : err);
+                    if (err.isEmpty())
+                        err = QStringLiteral("Смена страны не удалась. Подробности в import.log");
+                    QMessageBox::warning(this, VTR("app.title"), err);
                     return;
                 }
                 auto updated = SsconfResolver::pickByCountry(servers, profile->countryCode);

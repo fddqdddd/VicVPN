@@ -145,7 +145,10 @@ void ImportDialog::onOk() {
             imported_ = ImportService::importJson(text, &err);
     }
     if (imported_.empty()) {
-        QMessageBox::warning(this, VTR("import.title"), err.isEmpty() ? "Parse failed" : err);
+        if (err.isEmpty())
+            err = QStringLiteral("Не удалось разобрать ни один ключ. Подробности в import.log");
+        ParseLog::detail(QStringLiteral("import dialog: giving up, error='%1'").arg(err));
+        QMessageBox::warning(this, VTR("import.title"), err);
         return;
     }
     accept();

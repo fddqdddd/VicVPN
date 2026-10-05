@@ -114,6 +114,7 @@ QString SsconfResolver::toFetchUrl(const QString& ssconfUri, const QString& coun
 }
 
 static QByteArray httpGetSsconf(const QString& url, QString* error) {
+    ParseLog::detail(QStringLiteral("ssconf GET %1").arg(url));
     QFile log(AppPaths::coreLogFile());
     if (log.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
         log.write(QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8());
@@ -121,32 +122,48 @@ static QByteArray httpGetSsconf(const QString& url, QString* error) {
         log.write(url.toUtf8());
         log.write("\n");
     }
-    return httpGetSubscription(url, error, 30000, "Happ/3.0");
+    const QByteArray body = httpGetSubscription(url, error, 30000, "Happ/3.0");
+    ParseLog::detail(QStringLiteral("ssconf response: %1 bytes, error='%2'")
+                         .arg(body.size())
+                         .arg(error && !error->isEmpty() ? *error : QStringLiteral("none")));
+    return body;
 }
 
 std::vector<ServerProfile> SsconfResolver::resolve(const QString& ssconfUri, QString* error,
                                                    const QString& countryCode) {
+    ParseLog::attempt(ssconfUri, QStringLiteral("ssconf resolve, country=%1").arg(countryCode));
+
     QByteArray raw;
     if (auto inlineBody = inlineSsconfBody(ssconfUri)) {
         raw = *inlineBody;
+        ParseLog::detail(QStringLiteral("ssconf: inline body, %1 bytes").arg(raw.size()));
     } else {
         const QString url = toFetchUrl(ssconfUri, countryCode);
         if (url.isEmpty()) {
+            ParseLog::detail(QStringLiteral("ssconf: cannot build fetch URL from URI"));
             if (error) *error = "Invalid ssconf URI";
             return {};
         }
         raw = httpGetSsconf(url, error);
-        if (raw.isEmpty())
+        if (raw.isEmpty()) {
+            ParseLog::attempt(ssconfUri, QStringLiteral("ssconf FAILED (empty body)"));
+            if (error && error->isEmpty())
+                *error = QStringLiteral("Сервер вернул пустой ответ");
             return {};
+        }
     }
 
     const QString text = QString::fromUtf8(raw).trimmed();
     std::vector<ServerProfile> result = SubscriptionBodyDecoder::decode(raw, error);
     if (result.empty()) {
+        ParseLog::attempt(ssconfUri, QStringLiteral("ssconf FAILED (no key recognised, %1 bytes)")
+                                    .arg(raw.size()));
         if (error && error->isEmpty())
             *error = text.isEmpty() ? "Пустой ответ сервера" : "Не удалось распознать формат ответа";
         return {};
     }
+    ParseLog::attempt(ssconfUri,
+                      QStringLiteral("ssconf OK -> %1 profile(s)").arg(result.size()));
 
     const QString cc = countryCode.trimmed().toUpper();
     for (auto& s : result) {
