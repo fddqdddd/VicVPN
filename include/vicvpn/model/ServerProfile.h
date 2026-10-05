@@ -9,7 +9,16 @@ namespace vicvpn {
 enum class CoreType { Xray, Hysteria2 };
 enum class Protocol {
     Vless, Vmess, Shadowsocks, Trojan, Socks,
-    Hysteria2, Unknown
+    Hysteria2, Ssh, Unknown
+};
+
+struct SshConfig {
+    QString host;
+    int port = 22;
+    QString user;
+    QString password;
+    QString privateKeyPath;
+    QString passphrase;
 };
 
 struct ServerProfile {
@@ -21,6 +30,7 @@ struct ServerProfile {
     QString rawUri;
     nlohmann::json xrayOutbound = nlohmann::json::object();
     nlohmann::json hy2Config = nlohmann::json::object();
+    SshConfig ssh;
     bool passthroughJson = false;
     nlohmann::json passthroughConfig = nlohmann::json::object();
     QString subscriptionUrl;

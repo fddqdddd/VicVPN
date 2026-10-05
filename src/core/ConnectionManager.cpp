@@ -136,10 +136,12 @@ static ServerProfile freshServerProfile(const ServerProfile& server) {
     const QString raw = server.rawUri.trimmed();
     if (raw.startsWith("vless://", Qt::CaseInsensitive) || raw.startsWith("vmess://", Qt::CaseInsensitive) ||
         raw.startsWith("ss://", Qt::CaseInsensitive) || raw.startsWith("trojan://", Qt::CaseInsensitive) ||
-        raw.startsWith("socks://", Qt::CaseInsensitive) || raw.startsWith("socks5://", Qt::CaseInsensitive)) {
+        raw.startsWith("socks://", Qt::CaseInsensitive) || raw.startsWith("socks5://", Qt::CaseInsensitive) ||
+        raw.startsWith("ssh://", Qt::CaseInsensitive)) {
         if (auto parsed = UriParser::parse(raw)) {
             active.xrayOutbound = parsed->xrayOutbound;
             active.protocol = parsed->protocol;
+            active.ssh = parsed->ssh;
             active.passthroughJson = parsed->passthroughJson;
             active.passthroughConfig = parsed->passthroughConfig;
             active.core = parsed->core;
@@ -496,8 +498,15 @@ void ConnectionManager::scheduleConnectVerify(int delayMs) {
 
 bool ConnectionManager::connectServer(const ServerProfile& server) {
     QString resolveError;
-    const ServerProfile active = resolveActiveServer(server, &resolveError);
-    if (!hasProxyConfig(active)) {
+    ServerProfile active = resolveActiveServer(server, &resolveError);
+
+    const bool isSsh = active.protocol == Protocol::Ssh;
+    if (isSsh && active.ssh.host.isEmpty()) {
+        setState(ConnectionState::Error, "SSH: не указан хост сервера");
+        return false;
+    }
+
+    if (!hasProxyConfig(active) && !isSsh) {
         QString msg = resolveError;
         if (SsconfCountry::isSsconfUri(server.subscriptionUrl)) {
             if (msg.isEmpty())
@@ -518,6 +527,28 @@ bool ConnectionManager::connectServer(const ServerProfile& server) {
         return false;
     }
 
+    if (isSsh) {
+        sshTunnel_ = std::make_unique<SshTunnel>();
+        QString sshError;
+        if (!sshTunnel_->start(active.ssh, &sshError)) {
+            sshTunnel_.reset();
+            setState(ConnectionState::Error, QString("SSH: %1").arg(sshError));
+            return false;
+        }
+        nlohmann::json socksOut;
+        socksOut["protocol"] = "socks";
+        socksOut["tag"] = "proxy";
+        nlohmann::json socksServer;
+        socksServer["address"] = "127.0.0.1";
+        socksServer["port"] = static_cast<int>(sshTunnel_->localPort());
+        socksServer["users"] = nlohmann::json::array();
+        socksOut["settings"] = {{"servers", nlohmann::json::array({socksServer})}};
+        active.xrayOutbound = socksOut;
+        active.name = QString("%1 (SSH %2)")
+                          .arg(active.name.isEmpty() ? active.ssh.host : active.name)
+                          .arg(active.ssh.user);
+    }
+
     engine_ = resolveEngine(active, Settings::instance().get());
     useDirectSs_ = false;
     directSsProxy_.clear();
@@ -535,6 +566,8 @@ bool ConnectionManager::connectServer(const ServerProfile& server) {
     bypassRoute_ = {};
     if (engine_ != CoreEngine::Hysteria2) {
         bypassHost_ = proxyHostFromServer(active);
+        if (active.protocol == Protocol::Ssh && !active.ssh.host.isEmpty())
+            bypassHost_ = active.ssh.host;
         if (!bypassHost_.isEmpty())
             bypassRoute_ = TunPlatform::resolveBypassRoute(bypassHost_);
     }
@@ -652,6 +685,7 @@ void ConnectionManager::disconnect() {
     tun2socks_.stop();
     xray_.stop();
     hy2_.stop();
+    sshTunnel_.reset();
     if (!bypassHost_.isEmpty() && bypassRoute_.valid)
         TunPlatform::removeRoutes(QString(), bypassHost_, bypassRoute_);
     QThread::msleep(300);

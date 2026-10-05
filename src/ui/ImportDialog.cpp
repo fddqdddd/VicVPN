@@ -35,7 +35,7 @@ ImportDialog::ImportDialog(QWidget* parent) : QDialog(parent) {
     auto* urlPage = new QWidget;
     auto* urlLay = new QVBoxLayout(urlPage);
     urlEdit_ = new QLineEdit;
-    urlEdit_->setPlaceholderText("https://... or ssconf://...");
+    urlEdit_->setPlaceholderText("https://... , ssconf://... , ssh://user:pass@host:22");
     urlLay->addWidget(new QLabel(VTR("import.url")));
     urlLay->addWidget(urlEdit_);
     connect(urlEdit_, &QLineEdit::textChanged, this, &ImportDialog::onInputChanged);

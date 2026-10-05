@@ -121,35 +121,7 @@ static QByteArray httpGetSsconf(const QString& url, QString* error) {
         log.write(url.toUtf8());
         log.write("\n");
     }
-
-    QNetworkAccessManager nam;
-    QNetworkRequest req{QUrl(url)};
-    req.setHeader(QNetworkRequest::UserAgentHeader, "Happ/3.0");
-    QEventLoop loop;
-    QNetworkReply* reply = nam.get(req);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    if (reply->error() != QNetworkReply::NoError) {
-        if (error) {
-            if (reply->error() == QNetworkReply::AuthenticationRequiredError)
-                *error = QString::fromUtf8(
-                    "Сервер отклонил запрос (401). Не меняйте путь ключа — выберите «Авто» в стране.");
-            else
-                *error = reply->errorString();
-        }
-        reply->deleteLater();
-        return {};
-    }
-    const QByteArray data = reply->readAll();
-    reply->deleteLater();
-    return data;
-}
-
-static QString decodeSubscriptionBody(const QByteArray& raw) {
-    const QString text = QString::fromUtf8(raw).trimmed();
-    if (text.contains("://"))
-        return text;
-    return QString::fromUtf8(QByteArray::fromBase64(raw));
+    return httpGetSubscription(url, error, 30000, "Happ/3.0");
 }
 
 std::vector<ServerProfile> SsconfResolver::resolve(const QString& ssconfUri, QString* error,
@@ -169,25 +141,17 @@ std::vector<ServerProfile> SsconfResolver::resolve(const QString& ssconfUri, QSt
     }
 
     const QString text = QString::fromUtf8(raw).trimmed();
-    std::vector<ServerProfile> result;
-    if (text.startsWith('{') || text.startsWith('[')) {
-        result = ImportService::importJson(text, error);
-    } else if (OutlineConfigParser::looksLikeOutlineYaml(text)) {
-        result = OutlineConfigParser::importProfiles(text, ssconfUri);
-    } else {
-        result = UriParser::parseMany(decodeSubscriptionBody(raw));
-        if (result.empty()) {
-            if (auto one = UriParser::parse(text))
-                result.push_back(*one);
-            else if (error && error->isEmpty())
-                *error = "Remote config contains no supported URIs";
-        }
+    std::vector<ServerProfile> result = SubscriptionBodyDecoder::decode(raw, error);
+    if (result.empty()) {
+        if (error && error->isEmpty())
+            *error = text.isEmpty() ? "Пустой ответ сервера" : "Не удалось распознать формат ответа";
+        return {};
     }
-    if (result.empty() && error && error->isEmpty())
-        *error = "Unsupported remote JSON format";
 
     const QString cc = countryCode.trimmed().toUpper();
     for (auto& s : result) {
+        if (s.rawUri.isEmpty())
+            s.rawUri = ssconfUri.trimmed();
         s.subscriptionUrl = ssconfUri.trimmed();
         s.countryCode = cc;
         if (!cc.isEmpty()) {

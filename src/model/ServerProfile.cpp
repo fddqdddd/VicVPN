@@ -10,6 +10,7 @@ QString ServerProfile::protocolLabel() const {
     case Protocol::Trojan: return "Trojan";
     case Protocol::Socks: return "Socks";
     case Protocol::Hysteria2: return "HY2";
+    case Protocol::Ssh: return "SSH";
     default: return "Unknown";
     }
 }

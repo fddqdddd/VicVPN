@@ -3,6 +3,8 @@
 #include "vicvpn/model/ServerProfile.h"
 #include "vicvpn/core/CoreManagers.h"
 #include "vicvpn/util/BypassRoute.h"
+#include "vicvpn/tunnel/SshTunnel.h"
+#include <memory>
 #include <QObject>
 #include <QTimer>
 
@@ -54,6 +56,7 @@ private:
     QString bypassHost_;
     BypassRoute bypassRoute_;
     QString lastSingboxConfig_;
+    std::unique_ptr<SshTunnel> sshTunnel_;
     QTimer* bypassTimer_ = nullptr;
     QTimer* proxyWatchdog_ = nullptr;
 };

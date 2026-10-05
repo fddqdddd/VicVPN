@@ -1,10 +1,19 @@
 #pragma once
 
 #include "vicvpn/model/ServerProfile.h"
+#include <QByteArray>
 #include <QString>
 #include <vector>
 
 namespace vicvpn {
+
+QByteArray httpGetSubscription(const QString& url, QString* error = nullptr,
+                               int timeoutMs = 30000, const QByteArray& userAgent = "VicVPN/0.1");
+
+class SubscriptionBodyDecoder {
+public:
+    static std::vector<ServerProfile> decode(const QByteArray& raw, QString* error = nullptr);
+};
 
 struct ImportOptions {
     QString ssconfCountry;

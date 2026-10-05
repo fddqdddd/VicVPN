@@ -1,6 +1,7 @@
 #include "vicvpn/parser/ImportService.h"
 #include "vicvpn/parser/UriParser.h"
 #include "vicvpn/parser/SingboxConverter.h"
+#include "vicvpn/parser/OutlineConfigParser.h"
 #include "vicvpn/parser/SsconfCountry.h"
 #include "vicvpn/util/StringUtil.h"
 #include <QEventLoop>
@@ -11,41 +12,117 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QTimer>
 #include <QUrl>
 
 namespace vicvpn {
 
-static QByteArray httpGet(const QString& url, QString* error) {
+QByteArray httpGetSubscription(const QString& url, QString* error, int timeoutMs,
+                               const QByteArray& userAgent) {
     QNetworkAccessManager nam;
     QNetworkRequest req{QUrl(url)};
-    req.setHeader(QNetworkRequest::UserAgentHeader, "VicVPN/0.1");
+    req.setHeader(QNetworkRequest::UserAgentHeader, userAgent);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setTransferTimeout(timeoutMs);
+
     QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+
     QNetworkReply* reply = nam.get(req);
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timer, &QTimer::timeout, reply, &QNetworkReply::abort);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timer.start(timeoutMs);
     loop.exec();
-    if (reply->error() != QNetworkReply::NoError) {
-        if (error) *error = reply->errorString();
-        reply->deleteLater();
-        return {};
-    }
+    timer.stop();
+
+    const QNetworkReply::NetworkError netError = reply->error();
+    const QString netErrorText = reply->errorString();
     const QByteArray data = reply->readAll();
     reply->deleteLater();
+
+    if (netError != QNetworkReply::NoError) {
+        if (error) {
+            if (netError == QNetworkReply::OperationCanceledError)
+                *error = QString("Таймаут ответа сервера (%1 с)").arg(timeoutMs / 1000);
+            else if (netError == QNetworkReply::AuthenticationRequiredError)
+                *error = "Сервер отклонил запрос (401). Проверьте ключ подписки.";
+            else if (netError == QNetworkReply::SslHandshakeFailedError)
+                *error = "Ошибка SSL/TLS: " + netErrorText;
+            else
+                *error = netErrorText;
+        }
+        return {};
+    }
     return data;
 }
 
-static QString decodeSubscriptionBody(const QByteArray& raw) {
+static std::vector<ServerProfile> parseSubscriptionText(const QString& text, QString* error) {
+    const QString t = text.trimmed();
+    if (t.isEmpty()) {
+        if (error) *error = "Пустой ответ сервера";
+        return {};
+    }
+
+    if (t.startsWith('{') || t.startsWith('[')) {
+        QString scratch;
+        auto v = ImportService::importJson(t, &scratch);
+        if (!v.empty())
+            return v;
+    }
+
+    if (OutlineConfigParser::looksLikeOutlineYaml(t)) {
+        auto v = OutlineConfigParser::importProfiles(t);
+        if (!v.empty())
+            return v;
+    }
+
+    auto v = UriParser::parseMany(t);
+    if (!v.empty())
+        return v;
+    if (auto one = UriParser::parse(t))
+        return {*one};
+
+    if (error && error->isEmpty())
+        *error = "Ответ не содержит поддерживаемых ключей "
+                 "(ожидаются vless://, vmess://, ss://, trojan://, socks://, hy2://, "
+                 "JSON или base64-список)";
+    return {};
+}
+
+std::vector<ServerProfile> SubscriptionBodyDecoder::decode(const QByteArray& raw, QString* error) {
+    if (raw.isEmpty()) {
+        if (error) *error = "Пустой ответ сервера";
+        return {};
+    }
+
+    QString scratch;
     const QString text = QString::fromUtf8(raw).trimmed();
-    if (text.contains("://"))
-        return text;
-    const QByteArray dec = QByteArray::fromBase64(raw);
-    return QString::fromUtf8(dec);
+    auto direct = parseSubscriptionText(text, &scratch);
+    if (!direct.empty())
+        return direct;
+
+    QByteArray decoded = QByteArray::fromBase64(raw);
+    if (decoded.trimmed().isEmpty())
+        decoded = base64UrlDecode(text);
+    const QString plain = QString::fromUtf8(decoded).trimmed();
+    if (!plain.isEmpty() && plain != text) {
+        auto v = parseSubscriptionText(plain, &scratch);
+        if (!v.empty())
+            return v;
+    }
+
+    if (error) *error = scratch;
+    return {};
 }
 
 std::vector<ServerProfile> SubscriptionFetcher::fetch(const QString& url, QString* error) {
-    const QByteArray raw = httpGet(url, error);
-    if (raw.isEmpty()) return {};
-    const QString body = decodeSubscriptionBody(raw);
-    auto servers = UriParser::parseMany(body);
+    const QByteArray raw = httpGetSubscription(url, error);
+    if (raw.isEmpty())
+        return {};
+    auto servers = SubscriptionBodyDecoder::decode(raw, error);
     for (auto& s : servers)
         s.subscriptionUrl = url;
     return servers;

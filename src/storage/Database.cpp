@@ -54,6 +54,7 @@ ServerProfile Database::rowToProfile(void* stmt) const {
     else if (proto == "trojan") p.protocol = Protocol::Trojan;
     else if (proto == "socks") p.protocol = Protocol::Socks;
     else if (proto == "hy2") p.protocol = Protocol::Hysteria2;
+else if (proto == "ssh") p.protocol = Protocol::Ssh;
     const QString core = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(s, 4)));
     p.core = core == "hysteria2" ? CoreType::Hysteria2 : CoreType::Xray;
     p.rawUri = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(s, 5)));
@@ -110,6 +111,7 @@ static QString protoToStr(Protocol p) {
     case Protocol::Trojan: return "trojan";
     case Protocol::Socks: return "socks";
     case Protocol::Hysteria2: return "hy2";
+case Protocol::Ssh: return "ssh";
     default: return "unknown";
     }
 }

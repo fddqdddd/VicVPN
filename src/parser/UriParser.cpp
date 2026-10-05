@@ -288,6 +288,39 @@ static std::optional<ServerProfile> parseSocks(const QString& uri) {
     return p;
 }
 
+static std::optional<ServerProfile> parseSsh(const QString& uri) {
+    QUrl u(uri);
+    if (!u.isValid() || u.scheme().compare("ssh", Qt::CaseInsensitive) != 0)
+        return std::nullopt;
+    const QString host = u.host();
+    if (host.isEmpty())
+        return std::nullopt;
+
+    auto p = baseProfile(Protocol::Ssh, uri);
+    p.ssh.host = host;
+    p.ssh.port = u.port(22);
+    p.ssh.user = urlDecode(u.userName());
+    p.ssh.password = urlDecode(u.password());
+
+    QUrlQuery q(u);
+    const QString key = queryParam(q, {"privateKey", "private_key", "key", "identity"});
+    if (!key.isEmpty())
+        p.ssh.privateKeyPath = key;
+    const QString pass = queryParam(q, {"passphrase", "keyPassphrase"});
+    if (!pass.isEmpty())
+        p.ssh.passphrase = pass;
+
+    if (p.ssh.user.isEmpty())
+        p.ssh.user = QStringLiteral("root");
+
+    QString tag = urlDecode(u.fragment());
+    if (tag.contains('?'))
+        tag = tag.split('?').first();
+    p.name = tag.isEmpty() ? QString("%1:%2").arg(host).arg(p.ssh.port) : tag;
+    p.remark = p.protocolLabel();
+    return p;
+}
+
 std::optional<ServerProfile> UriParser::parse(const QString& input) {
     const QString s = trimUri(input);
     if (s.startsWith("vless://", Qt::CaseInsensitive)) return parseVless(s);
@@ -296,6 +329,7 @@ std::optional<ServerProfile> UriParser::parse(const QString& input) {
     if (s.startsWith("trojan://", Qt::CaseInsensitive)) return parseTrojan(s);
     if (s.startsWith("socks://", Qt::CaseInsensitive) || s.startsWith("socks5://", Qt::CaseInsensitive))
         return parseSocks(s);
+    if (s.startsWith("ssh://", Qt::CaseInsensitive)) return parseSsh(s);
     if (s.startsWith("hy2://", Qt::CaseInsensitive) || s.startsWith("hysteria2://", Qt::CaseInsensitive))
         return Hy2UriParser::parse(s);
     return std::nullopt;

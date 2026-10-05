@@ -60,6 +60,7 @@ set(VICVPN_SOURCES
     src/parser/OutlineConfigParser.cpp
     src/parser/SsconfCountry.cpp
     src/parser/ImportService.cpp
+    src/tunnel/SshTunnel.cpp
     src/storage/Database.cpp
     src/model/ServerProfile.cpp
     src/util/AppPaths.cpp
@@ -126,6 +127,14 @@ if(WIN32)
         message(STATUS "Linking winpthread statically: ${WINPTHREAD_A}")
         target_link_libraries(VicVPN PRIVATE "${WINPTHREAD_A}")
     endif()
+
+    set(LIBSSH2_A "C:/msys64/ucrt64/lib/libssh2.dll.a")
+    if(EXISTS "${LIBSSH2_A}")
+        message(STATUS "Linking libssh2: ${LIBSSH2_A}")
+        target_link_libraries(VicVPN PRIVATE "${LIBSSH2_A}")
+    else()
+        message(FATAL_ERROR "libssh2 not found in C:/msys64/ucrt64 (pacman -S mingw-w64-ucrt-x86_64-libssh2)")
+    endif()
 endif()
 
 if(WIN32)
@@ -169,3 +178,31 @@ endif()
 
 install(TARGETS VicVPN RUNTIME DESTINATION bin)
 install(DIRECTORY resources/styles DESTINATION share/vicvpn)
+
+option(VICVPN_BUILD_TESTS "Build parser smoke tests" OFF)
+if(VICVPN_BUILD_TESTS)
+    add_executable(vicvpn_parser_smoke
+        tests/parser_smoke.cpp
+        src/parser/UriParser.cpp
+        src/parser/Hy2UriParser.cpp
+        src/parser/SubscriptionFetcher.cpp
+        src/parser/SsconfResolver.cpp
+        src/parser/SingboxConverter.cpp
+        src/parser/OutlineConfigParser.cpp
+        src/parser/SsconfCountry.cpp
+        src/parser/ImportService.cpp
+        src/app/I18n.cpp
+        src/model/ServerProfile.cpp
+        src/util/StringUtil.cpp
+        src/util/AppPaths.cpp
+    )
+    target_include_directories(vicvpn_parser_smoke PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_BINARY_DIR}/generated
+    )
+    target_link_libraries(vicvpn_parser_smoke PRIVATE Qt6::Core Qt6::Network nlohmann_json::nlohmann_json)
+    if(WIN32)
+        target_include_directories(vicvpn_parser_smoke PRIVATE C:/msys64/ucrt64/include)
+        target_link_libraries(vicvpn_parser_smoke PRIVATE C:/msys64/ucrt64/lib/libsqlite3.a)
+    endif()
+endif()
