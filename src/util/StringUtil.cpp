@@ -1,6 +1,7 @@
 #include "vicvpn/util/StringUtil.h"
 #include <QByteArray>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QUrl>
 #include <QUrlQuery>
 
@@ -28,7 +29,19 @@ QString base64UrlEncode(const QByteArray& data) {
 }
 
 QString trimUri(const QString& s) {
-    return s.trimmed();
+    QString t = s.trimmed();
+    // Text copied from messengers and docs often keeps wrapping quotes or
+    // smart quotes, which make QUrl reject the whole link.
+    const QStringList quotes = {QStringLiteral("\""), QStringLiteral("'"),
+                                QStringLiteral("\u201C"), QStringLiteral("\u201D"),
+                                QStringLiteral("\u00AB"), QStringLiteral("\u00BB")};
+    for (const QString& q : quotes) {
+        if (t.size() >= 2 && t.startsWith(q) && t.endsWith(q)) {
+            t = t.mid(1, t.size() - 2).trimmed();
+            break;
+        }
+    }
+    return t;
 }
 
 QUrl parseUriQuery(const QString& query) {

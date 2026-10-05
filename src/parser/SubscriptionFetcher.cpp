@@ -59,10 +59,27 @@ QByteArray httpGetSubscription(const QString& url, QString* error, int timeoutMs
     return data;
 }
 
+static bool looksLikeHtml(const QString& text) {
+    const QString head = text.left(600).toLower();
+    return head.contains("<!doctype html") || head.contains("<html") ||
+           head.contains("<form") || head.contains("<head") || head.contains("recaptcha") ||
+           head.contains("g-recaptcha") || head.contains("<title>");
+}
+
 static std::vector<ServerProfile> parseSubscriptionText(const QString& text, QString* error) {
     const QString t = text.trimmed();
     if (t.isEmpty()) {
         if (error) *error = "Пустой ответ сервера";
+        return {};
+    }
+
+    if (looksLikeHtml(t)) {
+        ParseLog::detail(QStringLiteral("response looks like HTML, not a key list (first 200: %1)")
+                             .arg(QString::fromUtf8(t.left(200).toUtf8()).replace('\n', ' ')));
+        if (error)
+            *error = "Сервер вернул HTML-страницу, а не список ключей. "
+                     "Скорее всего нужна авторизация или капча — откройте ссылку в браузере. "
+                     "Подробности в import.log";
         return {};
     }
 
@@ -119,22 +136,56 @@ std::vector<ServerProfile> SubscriptionBodyDecoder::decode(const QByteArray& raw
 }
 
 std::vector<ServerProfile> SubscriptionFetcher::fetch(const QString& url, QString* error) {
+    ParseLog::attempt(url, QStringLiteral("http subscription fetch"));
     const QByteArray raw = httpGetSubscription(url, error);
-    if (raw.isEmpty())
+    if (raw.isEmpty()) {
+        if (error && error->isEmpty())
+            *error = QStringLiteral("Сервер вернул пустой ответ (0 байт). Проверьте ссылку подписки.");
+        ParseLog::attempt(url, QStringLiteral("FAILED (empty body, error='%1')")
+                                  .arg(error && !error->isEmpty() ? *error : QStringLiteral("none")));
         return {};
+    }
+    ParseLog::detail(QStringLiteral("subscription body: %1 bytes").arg(raw.size()));
     auto servers = SubscriptionBodyDecoder::decode(raw, error);
+    ParseLog::attempt(url, QStringLiteral("-> %1 profile(s)").arg(servers.size()));
     for (auto& s : servers)
         s.subscriptionUrl = url;
     return servers;
 }
 
+// People paste SSH targets in every shape: "ssh://root:pw@h:22", "root@h:22",
+// "h:22", "ssh root@h". Normalise them so only the explicit parser deals with URIs.
+static QString normalizeSshTarget(const QString& input) {
+    const QString t = input.trimmed();
+    if (t.isEmpty() || t.contains(QLatin1String("://")))
+        return t;
+
+    static const QRegularExpression withUser(
+        QStringLiteral(R"(^(?:ssh\s+)?([A-Za-z0-9._\-]+)(?:@)([A-Za-z0-9._\-]+)(?::(\d{1,5}))?$)"));
+    static const QRegularExpression hostOnly(
+        QStringLiteral(R"(^(?:ssh\s+)?([A-Za-z0-9._\-]+)(?::(\d{1,5}))?$)"));
+
+    const auto m = withUser.match(t);
+    if (m.hasMatch()) {
+        const int port = m.captured(3).isEmpty() ? 22 : m.captured(3).toInt();
+        return QStringLiteral("ssh://%1@%2:%3").arg(m.captured(1), m.captured(2)).arg(port);
+    }
+    const auto h = hostOnly.match(t);
+    // A bare host only becomes SSH when a port is spelled out, otherwise a
+    // pasted domain would silently turn into a login attempt.
+    if (h.hasMatch() && !h.captured(2).isEmpty())
+        return QStringLiteral("ssh://%1:%2").arg(h.captured(1)).arg(h.captured(2).toInt());
+    return t;
+}
+
 std::vector<ServerProfile> ImportService::importText(const QString& text, QString* error,
                                                      const ImportOptions& options) {
-    const QString t = text.trimmed();
+    QString t = trimUri(text);
     if (t.isEmpty()) {
         if (error) *error = "Empty input";
         return {};
     }
+    t = normalizeSshTarget(t);
     if (t.startsWith("http://", Qt::CaseInsensitive) || t.startsWith("https://", Qt::CaseInsensitive)) {
         ParseLog::attempt(t, QStringLiteral("subscription fetch"));
         auto list = SubscriptionFetcher::fetch(t, error);

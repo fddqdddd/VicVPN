@@ -239,6 +239,85 @@ int main(int argc, char** argv) {
         check(list.size() == 2, "BOM before first key is stripped");
     }
 
+    {
+        QString err;
+        const auto p = ImportService::importText("ssh://root:s3cret@1.2.3.4:22#Node", &err);
+        check(p.size() == 1, "ssh:// full form imports");
+        if (p.empty())
+            printf("    [diag] ssh full form error='%s'\n", qPrintable(err));
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("ssh://root@1.2.3.4", &err);
+        check(p.size() == 1, "ssh:// without password imports");
+        if (p.empty())
+            printf("    [diag] ssh no-pass error='%s'\n", qPrintable(err));
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("ssh://1.2.3.4:2222#Node2", &err);
+        check(p.size() == 1, "ssh:// without user imports");
+        if (p.empty())
+            printf("    [diag] ssh no-user error='%s'\n", qPrintable(err));
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("SSH://root:pw@host.example:22#Upper", &err);
+        check(p.size() == 1, "SSH:// uppercase imports");
+        if (p.empty())
+            printf("    [diag] ssh upper error='%s'\n", qPrintable(err));
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("plain.example.com:8443", &err);
+        check(p.size() == 1, "bare host:port without scheme imports as ssh");
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("root@1.2.3.4", &err);
+        check(p.size() == 1, "bare user@host imports as ssh");
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("ssh root@1.2.3.4:2200", &err);
+        check(p.size() == 1, "'ssh user@host:port' imports");
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("1.2.3.4:2222", &err);
+        check(p.size() == 1, "bare host:port imports as ssh");
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("justanexample.com", &err);
+        check(p.empty() && !err.isEmpty(), "bare domain without port is NOT treated as ssh");
+    }
+
+    {
+        // HTML instead of a key list must be reported clearly, not as "Parse failed".
+        const QString html = QStringLiteral(
+            "<!DOCTYPE html><html><head><title>Captcha</title></head>"
+            "<body><form>g-recaptcha</form></body></html>");
+        QString err;
+        const auto decoded = SubscriptionBodyDecoder::decode(html.toUtf8(), &err);
+        check(decoded.empty(), "html body -> no profiles");
+        check(err.contains("HTML"), "html body -> explicit HTML error");
+    }
+
+    {
+        QString err;
+        const auto p = ImportService::importText("  \"ssh://root:pw@1.2.3.4:22#Quoted\"  ", &err);
+        check(p.size() == 1, "wrapped in quotes/spaces still imports");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_fail == 0 ? "PASS" : "FAIL", g_fail);
     return g_fail == 0 ? 0 : 1;
 }
