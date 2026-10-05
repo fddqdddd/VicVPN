@@ -81,6 +81,49 @@ int main(int argc, char** argv) {
         check(list.size() == 1 && list[0].protocol == Protocol::Ssh, "importText routes ssh://");
     }
 
+    {
+        const QString outline = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpLRVdrMzJ2c09IMlI2Qkd5U3pmcVlJ@216.105.168.18:443"
+                                "/?outline=1&prefix=%16%03%01%00%C2%A8%01%01#\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 US @OutlineVPN_ru";
+        const auto p = UriParser::parse(outline);
+        check(p.has_value(), "Outline base64 ss:// parses");
+        if (p) {
+            check(p->protocol == Protocol::Shadowsocks, "outline ss protocol");
+            check(p->xrayOutbound["settings"]["servers"][0]["address"] == "216.105.168.18",
+                  "outline ss host");
+            check(p->xrayOutbound["settings"]["servers"][0]["port"] == 443, "outline ss port");
+            check(p->xrayOutbound["settings"]["servers"][0]["method"] ==
+                      "chacha20-ietf-poly1305",
+                  "outline ss method decoded from base64");
+            const std::string pw =
+                p->xrayOutbound["settings"]["servers"][0]["password"].get<std::string>();
+            check(pw == "KEWk32vsOH2R6BGySzfqYI", "outline ss password decoded from base64");
+            const std::string prefix =
+                p->xrayOutbound["settings"]["servers"][0]["prefix"].get<std::string>();
+            std::string expected;
+            for (unsigned char c : {0x16, 0x03, 0x01, 0x00, 0xC2, 0xA8, 0x01, 0x01})
+                expected.push_back(static_cast<char>(c));
+            check(prefix == expected, "outline ss binary prefix preserved byte-for-byte");
+            check(p->name.contains("OutlineVPN_ru"), "outline ss name from fragment");
+        }
+    }
+
+    {
+        const auto p = UriParser::parse("ss://aes-256-gcm:pwd@example.com:8388#Plain");
+        check(p.has_value() && p->xrayOutbound["settings"]["servers"][0]["method"] == "aes-256-gcm" &&
+                  p->xrayOutbound["settings"]["servers"][0]["password"] == "pwd",
+              "SIP002 plain method:password@host:port still works");
+    }
+
+    {
+        const QString legacy = "ss://" +
+                               QString::fromUtf8(QByteArray("aes-128-gcm:secret@1.2.3.4:9000").toBase64());
+        const auto p = UriParser::parse(legacy);
+        check(p.has_value() &&
+                  p->xrayOutbound["settings"]["servers"][0]["address"] == "1.2.3.4" &&
+                  p->xrayOutbound["settings"]["servers"][0]["port"] == 9000,
+              "legacy base64 method:password@host:port still works");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_fail == 0 ? "PASS" : "FAIL", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

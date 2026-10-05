@@ -179,50 +179,90 @@ static std::optional<ServerProfile> parseVmess(const QString& uri) {
 }
 
 static std::optional<ServerProfile> parseSs(const QString& uri) {
-    QUrl u(uri);
-    if (!u.isValid() || u.scheme() != "ss") return std::nullopt;
-    QString method, password, host;
-    int port = 8388;
-    if (!u.userName().isEmpty() && !u.password().isEmpty()) {
-        method = urlDecode(u.userName());
-        password = urlDecode(u.password());
-        host = u.host();
-        port = u.port(8388);
-    } else {
-        const QByteArray dec = QByteArray::fromBase64(u.userName().toUtf8() + u.path().toUtf8());
-        const QString plain = QString::fromUtf8(dec);
-        static QRegularExpression re(R"(^([^:@]+):([^@]+)@([^:]+):(\d+)$)");
-        auto m = re.match(plain);
-        if (!m.hasMatch()) {
-            const QByteArray dec2 = QByteArray::fromBase64(uri.mid(5).split('#').first().toUtf8());
-            auto m2 = re.match(QString::fromUtf8(dec2));
-            if (!m2.hasMatch()) return std::nullopt;
-            method = m2.captured(1);
-            password = m2.captured(2);
-            host = m2.captured(3);
-            port = m2.captured(4).toInt();
-        } else {
+    static const QRegularExpression legacyRe(R"(^([^:@]+):([^@]+)@([^:]+):(\d+)$)");
+
+    const int hash = uri.indexOf(QLatin1Char('#'));
+    const QString fragment = hash >= 0 ? uri.mid(hash + 1) : QString();
+    const QString body = hash >= 0 ? uri.left(hash) : uri;
+
+    QString payload = body.startsWith("ss://", Qt::CaseInsensitive) ? body.mid(5) : body;
+    const int qm = payload.indexOf(QLatin1Char('?'));
+    const QString queryPart = qm >= 0 ? payload.mid(qm + 1) : QString();
+    if (qm >= 0)
+        payload = payload.left(qm);
+
+    QString method;
+    QString password;
+    QString host;
+    int port = -1;
+
+    // Legacy: base64(method:password@host:port) as the whole payload
+    {
+        QByteArray dec = QByteArray::fromBase64(payload.toUtf8());
+        if (dec.trimmed().isEmpty())
+            dec = base64UrlDecode(payload);
+        const auto m = legacyRe.match(QString::fromUtf8(dec));
+        if (m.hasMatch()) {
             method = m.captured(1);
             password = m.captured(2);
             host = m.captured(3);
             port = m.captured(4).toInt();
         }
     }
+
+    // SIP002: [base64(method:password)@|method:password@]host:port
+    if (method.isEmpty()) {
+        const QUrl u(uri);
+        if (u.isValid() && u.scheme().compare("ss", Qt::CaseInsensitive) == 0) {
+            host = u.host();
+            port = u.port(-1);
+
+            const QString user = u.userName();
+            const QString pass = u.password();
+            if (!user.isEmpty() && !pass.isEmpty()) {
+                method = urlDecode(user);
+                password = urlDecode(pass);
+            } else {
+                QString userInfo = !user.isEmpty() ? user : pass;
+                if (!userInfo.isEmpty()) {
+                    const QString plain =
+                        QString::fromUtf8(QByteArray::fromBase64(userInfo.toUtf8()));
+                    userInfo = plain.contains(QLatin1Char(':')) ? plain : urlDecode(userInfo);
+                    const int colon = userInfo.indexOf(QLatin1Char(':'));
+                    if (colon > 0) {
+                        method = userInfo.left(colon);
+                        password = userInfo.mid(colon + 1);
+                    }
+                }
+            }
+        }
+    }
+
+    if (method.isEmpty() || host.isEmpty() || port <= 0)
+        return std::nullopt;
+
     auto p = baseProfile(Protocol::Shadowsocks, uri);
+    nlohmann::json server;
+    server["address"] = host.toStdString();
+    server["port"] = port;
+    server["method"] = method.toStdString();
+    server["password"] = password.toStdString();
     p.xrayOutbound = {
         {"protocol", "shadowsocks"},
         {"tag", "proxy"},
-        {"settings", {
-            {"servers", nlohmann::json::array({{
-                {"address", host.toStdString()},
-                {"port", port},
-                {"method", method.toStdString()},
-                {"password", password.toStdString()}
-            }})}
-        }}
+        {"settings", {{"servers", nlohmann::json::array({server})}}}
     };
-    p.name = urlDecode(u.fragment());
-    if (p.name.isEmpty()) p.name = host;
+
+    if (!queryPart.isEmpty()) {
+        const QUrlQuery query(queryPart);
+        const QString prefix = query.queryItemValue("prefix", QUrl::FullyDecoded);
+        if (!prefix.isEmpty())
+            p.xrayOutbound["settings"]["servers"][0]["prefix"] = prefix.toStdString();
+    }
+
+    p.name = urlDecode(fragment);
+    if (p.name.isEmpty())
+        p.name = host;
     p.remark = "Shadowsocks";
     return p;
 }
