@@ -25,9 +25,15 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
     title->setAlignment(Qt::AlignCenter);
     layout->addWidget(title);
 
-    auto* ver = new QLabel(VTR("about.version") + " " + QString(VICVPN_VERSION));
+    auto* ver = new QLabel(VTR("about.version") + " " + QString(VICVPN_VERSION) + " (" +
+                       QString(VICVPN_CHANNEL) + ")");
     ver->setAlignment(Qt::AlignCenter);
     layout->addWidget(ver);
+
+    auto* build = new QLabel(QStringLiteral("build ") + QString(VICVPN_BUILD_ID));
+    build->setAlignment(Qt::AlignCenter);
+    build->setStyleSheet("color: #888;");
+    layout->addWidget(build);
 
     auto* desc = new QLabel(VTR("about.description"));
     desc->setWordWrap(true);

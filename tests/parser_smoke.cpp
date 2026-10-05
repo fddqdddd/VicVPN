@@ -23,8 +23,8 @@ int main(int argc, char** argv) {
     std::printf("==== QUrl diagnostics ====\n");
     const QStringList samples = {
         QStringLiteral("vless://11111111-1111-1111-1111-111111111111@1.1.1.1:443?type=ws&security=tls#Name"),
-        QStringLiteral("ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpLRVdrMzJ2c09IMlI2Qkd5U3pmcVlJ@216.105.168.18:443"
-                       "/?outline=1&prefix=%16%03%01%00%C2%A8%01%01#\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 US @OutlineVPN_ru"),
+        QStringLiteral("ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpkZW1vLXBhc3N3b3JkLTAwMDA=@192.0.2.10:443"
+                       "/?outline=1&prefix=%16%03%01%00%C2%A8%01%01#\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 US @DemoNode"),
         QStringLiteral("trojan://password@example.net:443?sni=a.b#My Node"),
         QStringLiteral("socks://1.2.3.4:1080#Socks"),
         QStringLiteral("vmess://eyJ2IjoiMiIsInBzIjoidGVzdCJ9"),
@@ -106,13 +106,13 @@ int main(int argc, char** argv) {
     }
 
     {
-        const QString outline = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpLRVdrMzJ2c09IMlI2Qkd5U3pmcVlJ@216.105.168.18:443"
-                                "/?outline=1&prefix=%16%03%01%00%C2%A8%01%01#\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 US @OutlineVPN_ru";
+        const QString outline = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpkZW1vLXBhc3N3b3JkLTAwMDA=@192.0.2.10:443"
+                                "/?outline=1&prefix=%16%03%01%00%C2%A8%01%01#\xF0\x9F\x87\xBA\xF0\x9F\x87\xB8 US @DemoNode";
         const auto p = UriParser::parse(outline);
         check(p.has_value(), "Outline base64 ss:// parses");
         if (p) {
             check(p->protocol == Protocol::Shadowsocks, "outline ss protocol");
-            check(p->xrayOutbound["settings"]["servers"][0]["address"] == "216.105.168.18",
+            check(p->xrayOutbound["settings"]["servers"][0]["address"] == "192.0.2.10",
                   "outline ss host");
             check(p->xrayOutbound["settings"]["servers"][0]["port"] == 443, "outline ss port");
             check(p->xrayOutbound["settings"]["servers"][0]["method"] ==
@@ -120,14 +120,14 @@ int main(int argc, char** argv) {
                   "outline ss method decoded from base64");
             const std::string pw =
                 p->xrayOutbound["settings"]["servers"][0]["password"].get<std::string>();
-            check(pw == "KEWk32vsOH2R6BGySzfqYI", "outline ss password decoded from base64");
+            check(pw == "demo-password-0000", "outline ss password decoded from base64");
             const std::string prefix =
                 p->xrayOutbound["settings"]["servers"][0]["prefix"].get<std::string>();
             std::string expected;
             for (unsigned char c : {0x16, 0x03, 0x01, 0x00, 0xC2, 0xA8, 0x01, 0x01})
                 expected.push_back(static_cast<char>(c));
             check(prefix == expected, "outline ss binary prefix preserved byte-for-byte");
-            check(p->name.contains("OutlineVPN_ru"), "outline ss name from fragment");
+            check(p->name.contains("DemoNode"), "outline ss name from fragment");
         }
     }
 
