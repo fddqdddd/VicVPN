@@ -4,6 +4,7 @@
 #include "vicvpn/app/Version.h"
 #include <QDialogButtonBox>
 #include <QLabel>
+#include <QPointer>
 #include <QPixmap>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -50,9 +51,14 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent) {
     auto* updateBtn = new QPushButton(VTR("about.check_update"));
     updateBtn->setToolTip(VTR("about.check_update"));
     layout->addWidget(updateBtn);
-    connect(updateBtn, &QPushButton::clicked, this, [this]() {
-        if (UpdateDialog::checkAndOffer(this))
-            accept();
+    const QPointer<QPushButton> btn(updateBtn);
+    connect(updateBtn, &QPushButton::clicked, this, [this, btn]() {
+        if (btn)
+            btn->setEnabled(false);
+        UpdateDialog::checkAndOffer(this, [btn]() {
+            if (btn)
+                btn->setEnabled(true);
+        });
     });
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok);

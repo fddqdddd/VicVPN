@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QMessageBox>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QTimer>
@@ -112,34 +113,38 @@ void downloadAndApply(QWidget* parent, const UpdateInfo& info) {
 
 } // namespace
 
-bool UpdateDialog::checkAndOffer(QWidget* parent) {
+void UpdateDialog::checkAndOffer(QWidget* parent, std::function<void()> onFinished) {
     logLine(QStringLiteral("--- update check (manual) ---"));
 
-    UpdateChecker::checkLatestAsync([parent](UpdateInfo info, QString error) {
+    // The caller's window may already be gone by the time the reply arrives.
+    const QPointer<QWidget> guard(parent);
+    UpdateChecker::checkLatestAsync([guard, onFinished](UpdateInfo info, QString error) {
+        QWidget* parent = guard.data();
         if (!error.isEmpty()) {
             logLine(QStringLiteral("check failed: %1").arg(error));
             showCheckFailed(parent, error);
-            return;
-        }
-        if (!info.available) {
+        } else if (!info.available) {
             logLine(QStringLiteral("up to date, current=%1 latest=%2")
                         .arg(info.currentVersion, info.latestVersion));
             showUpToDate(parent, info);
-            return;
+        } else {
+            logLine(QStringLiteral("update available: %1 -> %2 (%3, %4 bytes)")
+                        .arg(info.currentVersion, info.latestVersion, info.assetName,
+                             QString::number(info.assetSize)));
+            if (confirmUpdate(parent, info))
+                downloadAndApply(parent, info);
+            else
+                logLine(QStringLiteral("update declined"));
         }
-        logLine(QStringLiteral("update available: %1 -> %2 (%3, %4 bytes)")
-                    .arg(info.currentVersion, info.latestVersion, info.assetName,
-                         QString::number(info.assetSize)));
-        if (confirmUpdate(parent, info))
-            downloadAndApply(parent, info);
-        else
-            logLine(QStringLiteral("update declined"));
+        if (onFinished)
+            onFinished();
     });
-    return true;
 }
 
 void UpdateDialog::checkSilently(QWidget* parent) {
-    UpdateChecker::checkLatestAsync([parent](UpdateInfo info, QString error) {
+    const QPointer<QWidget> guard(parent);
+    UpdateChecker::checkLatestAsync([guard](UpdateInfo info, QString error) {
+        QWidget* parent = guard.data();
         if (!error.isEmpty()) {
             logLine(QStringLiteral("startup check failed: %1").arg(error));
             return;
