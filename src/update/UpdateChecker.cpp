@@ -84,25 +84,6 @@ QByteArray httpGet(const QUrl& url, const QMap<QByteArray, QByteArray>& headers,
     return data;
 }
 
-/** Picks the asset we can actually apply: setup for an install, portable for a folder copy. */
-QJsonObject pickAsset(const QJsonArray& assets, bool portable) {
-    const QString wanted = portable ? QStringLiteral("portable") : QStringLiteral("setup");
-    QJsonObject fallback;
-    for (const QJsonValue& v : assets) {
-        const QJsonObject a = v.toObject();
-        if (!a.value("name").toString().endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive)) {
-            if (fallback.isEmpty())
-                fallback = a;
-            continue;
-        }
-        if (!fallback.isEmpty())
-            fallback = a;
-        if (a.value("name").toString().contains(wanted, Qt::CaseInsensitive))
-            return a;
-    }
-    return fallback;
-}
-
 QString applyScript() {
     return QStringLiteral(R"PS(#Requires -Version 5.1
 param(
@@ -155,6 +136,39 @@ exit 0
 }
 
 } // namespace
+
+QJsonObject UpdateChecker::pickAsset(const QJsonArray& assets, bool portable) {
+    const QString wanted = portable ? QStringLiteral("portable") : QStringLiteral("setup");
+    const QString other = portable ? QStringLiteral("setup") : QStringLiteral("portable");
+
+    QJsonArray candidates;
+    for (const QJsonValue& v : assets) {
+        const QJsonObject a = v.toObject();
+        const QString name = a.value("name").toString();
+        if (name.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive))
+            candidates.append(a);
+    }
+
+    for (const QJsonValue& v : std::as_const(candidates)) {
+        const QString name = v.toObject().value("name").toString();
+        if (name.contains(wanted, Qt::CaseInsensitive))
+            return v.toObject();
+    }
+
+    // No package for this layout. A zip that does not name either layout may
+    // still be generic, but the other layout's package must never be applied:
+    // its internal structure differs and extraction would leave a broken install.
+    QJsonObject generic;
+    for (const QJsonValue& v : std::as_const(candidates)) {
+        const QString name = v.toObject().value("name").toString();
+        if (name.contains(other, Qt::CaseInsensitive))
+            continue;
+        if (!generic.isEmpty())
+            return QJsonObject();
+        generic = v.toObject();
+    }
+    return generic;
+}
 
 QString UpdateChecker::currentVersion() {
     return QString::fromLatin1(VICVPN_VERSION);
@@ -330,9 +344,21 @@ QString UpdateChecker::download(const UpdateInfo& info, QString* error, const Pr
                          : netErrorText;
         return {};
     }
-    if (QFileInfo(target).size() == 0) {
+    const qint64 written = QFileInfo(target).size();
+    if (written == 0) {
         QFile::remove(target);
         if (error) *error = QStringLiteral("Загружен пустой файл");
+        return {};
+    }
+    if (info.assetSize > 0 && written != info.assetSize) {
+        // A dropped connection can finish without an error; a short file would
+        // otherwise be passed to the apply script.
+        QFile::remove(target);
+        if (error) {
+            *error = QStringLiteral("Файл обрезан: получено %1 из %2 байт")
+                         .arg(written)
+                         .arg(info.assetSize);
+        }
         return {};
     }
     return target;

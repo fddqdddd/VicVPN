@@ -330,6 +330,52 @@ int main(int argc, char** argv) {
         check(!UpdateChecker::currentVersion().isEmpty(), "current version known");
     }
 
+    // Asset selection has to match the install layout: handing a setup package
+    // to a portable copy would put the files in the wrong place.
+    {
+        // Shape matches the GitHub release payload: objects with a "name".
+        const auto assetList = [](const QStringList& names) {
+            QJsonArray out;
+            for (const QString& n : names) {
+                QJsonObject o;
+                o.insert("name", n);
+                out.append(o);
+            }
+            return out;
+        };
+
+        const QJsonArray two = assetList(
+            {"VicVPN-windows-0.1.0-alpha-setup.zip", "VicVPN-windows-0.1.0-alpha-portable.zip"});
+        const QJsonArray reversed = assetList(
+            {"VicVPN-windows-0.1.0-alpha-portable.zip", "VicVPN-windows-0.1.0-alpha-setup.zip"});
+
+        check(UpdateChecker::pickAsset(two, true).value("name").toString().endsWith("-portable.zip"),
+              "portable picks portable asset");
+        check(UpdateChecker::pickAsset(two, false).value("name").toString().endsWith("-setup.zip"),
+              "install picks setup asset");
+        check(UpdateChecker::pickAsset(reversed, true).value("name").toString().endsWith("-portable.zip"),
+              "portable picks portable when setup comes first");
+        check(UpdateChecker::pickAsset(reversed, false).value("name").toString().endsWith("-setup.zip"),
+              "install picks setup when portable comes first");
+
+        const QJsonArray setupOnly = assetList({"app-setup.zip"});
+        check(UpdateChecker::pickAsset(setupOnly, false).value("name").toString() == "app-setup.zip",
+              "single package serves an install");
+        check(UpdateChecker::pickAsset(setupOnly, true).isEmpty(),
+              "setup package is never applied to a portable copy");
+
+        const QJsonArray single = assetList({"app.zip"});
+        check(UpdateChecker::pickAsset(single, true).value("name").toString() == "app.zip",
+              "one ambiguous zip still applies");
+
+        const QJsonArray bothAndDocs = assetList({"setup.zip", "portable.zip", "notes.txt"});
+        check(UpdateChecker::pickAsset(bothAndDocs, true).value("name").toString() == "portable.zip",
+              "non-zip assets are ignored");
+
+        const QJsonArray empty;
+        check(UpdateChecker::pickAsset(empty, true).isEmpty(), "no assets -> no update");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_fail == 0 ? "PASS" : "FAIL", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

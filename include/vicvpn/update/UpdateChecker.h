@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <functional>
 
@@ -47,6 +49,13 @@ public:
 
     /** Exposed for tests: compares "0.1.0-alpha" style versions. */
     static bool isNewer(const QString& candidate, const QString& current);
+
+    /**
+     * Picks the asset matching the install layout: "portable" for a folder
+     * copy, "setup" for an install. Returns an empty object when no match,
+     * so a mismatched package is never applied to the wrong layout.
+     */
+    static QJsonObject pickAsset(const QJsonArray& assets, bool portable);
 };
 
 } // namespace vicvpn
